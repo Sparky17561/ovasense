@@ -43,4 +43,16 @@ export const downloadReport = (resultId) => {
     return `${API_BASE_URL}/report/${resultId}/`;
 };
 
+/**
+ * Process text chat message
+ */
+export const processText = async (text, conversationHistory, currentData) => {
+    const response = await api.post('/chat/', {
+        text,
+        conversation_history: conversationHistory,
+        current_data: currentData
+    });
+    return response.data;
+};
+
 export default api;

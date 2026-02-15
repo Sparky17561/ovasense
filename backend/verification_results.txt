@@ -5,29 +5,39 @@ Testing: 🔴 Red Flag: Heavy Bleeding...
    -> Reasons: ['Red flag symptoms detected: Excessive menstrual bleeding', 'Please consult a doctor immediately.']
    ✅ PASS
 
-Testing: 🟢 Normal / Low Risk...
+Testing: 🟢 Low Risk (Healthy)...
    -> Result: Low Likelihood of PCOS (90.0%)
-   -> Reasons: ['Did not meet major clinical criteria (Ovulatory, Androgen, Metabolic)']
+   -> Reasons: ['Symptoms do not align with Rotterdam criteria']
    ✅ PASS
 
-Testing: 💊 Post-Pill Rebound (Simulated via Rule 1 if exists, otherwise Rotterdam)...
-   -> Result: Possible PCOS Risk (Insufficient Evidence) (50.0%)
-   -> Reasons: ['Met only 1 of 3 key criteria', 'Irregular menstrual cycles']
+Testing: 🟡 Insufficient Evidence (Only Irregular Cycles)...
+   -> Result: Possible PCOS Risk (Insufficient Evidence) (40.0%)
+   -> Reasons: ['Met only 1 of 3 key criteria', 'Irregular menstrual cycles (Gap > 45d or unpredictable)', 'Irregular cycles alone are not enough for diagnosis.']
    ✅ PASS
 
-Testing: 🩸 Insulin-Resistant Phenotype (Classic)...
-   -> Result: Insulin-Resistant PCOS (Likely) (85.0%)
-   -> Reasons: ['Elevated BMI (32.0)', 'Acanthosis nigricans (insulin resistance sign)', 'Strong insulin resistance indicators present']
+Testing: 🩸 Insulin-Resistant Phenotype (Strict)...
+   -> Result: Insulin-Resistant PCOS (Likely) (80.0%)
+   -> Reasons: ['Elevated BMI (28.0)', 'Sugar cravings', 'Strong insulin resistance indicators']
    ✅ PASS
 
 Testing: 🔥 Inflammatory Phenotype...
    -> Result: Inflammatory PCOS (Likely) (80.0%)
-   -> Reasons: ['Persistent acne', 'Hair thinning (alopecia)', 'Signs of inflammation (acne/mood)']
+   -> Reasons: ['Persistent acne', 'Signs of inflammation (acne/mood/fatigue)']
    ✅ PASS
 
-Testing: 🧠 Adrenal Phenotype...
+Testing: 💪 Lean PCOS (New)...
+   -> Result: Lean PCOS (Likely) (80.0%)
+   -> Reasons: ['Normal BMI', 'Persistent acne', 'Hirsutism (excessive hair)', 'Irregular menstrual cycles (Gap > 45d or unpredictable)']
+   ✅ PASS
+
+Testing: 🧠 Adrenal Phenotype (High Stress)...
    -> Result: Adrenal PCOS (Likely) (80.0%)
-   -> Reasons: ['High stress levels', 'Normal BMI', 'Excessive facial/body hair (hirsutism)']
+   -> Reasons: ['High stress', 'Low sleep', 'Normal BMI', 'Hirsutism (excessive hair)']
    ✅ PASS
 
-🏁 Results: 6/6 passed.
+Testing: ⚖️ Classic PCOS (Mixed)...
+   -> Result: PCOS Likely (Classic Phenotype) (80.0%)
+   -> Reasons: ['Irregular menstrual cycles (Gap > 45d or unpredictable)', 'Hirsutism (excessive hair)']
+   ✅ PASS
+
+🏁 Results: 8/8 passed.

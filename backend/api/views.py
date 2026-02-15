@@ -292,3 +292,51 @@ def process_voice(request):
             except:
                 pass
 
+@api_view(['POST'])
+def process_text(request):
+    """
+    POST /api/chat/
+    
+    Process text chat input: get Baymax response and extraction.
+    
+    Request:
+    {
+        "text": str,
+        "conversation_history": list,
+        "current_data": dict
+    }
+    
+    Returns:
+    {
+        "response_text": str,
+        "extracted_data": dict,
+        "ready_for_classification": bool
+    }
+    """
+    from .voice_pipeline import get_baymax_response
+    
+    try:
+        user_text = request.data.get('text', '')
+        conversation_history = request.data.get('conversation_history', [])
+        current_data = request.data.get('current_data', {})
+        
+        if not user_text:
+            return Response(
+                {'error': 'No text provided'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        result = get_baymax_response(user_text, conversation_history, current_data)
+        
+        return Response({
+            'response_text': result['response_text'],
+            'extracted_data': result.get('extracted_data'),
+            'ready_for_classification': result.get('ready_for_classification', False)
+        })
+        
+    except Exception as e:
+        print(f"Error in text chat: {e}")
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ChatBox from '../components/ChatBox';
 import VoiceButton from '../components/VoiceButton';
-import { classifySymptoms } from '../api';
+import { classifySymptoms, processText } from '../api';
 import { downloadReport } from '../api';
 import './Baymax.css';
 
@@ -51,109 +51,41 @@ function Baymax() {
         // Voice responses come from the /api/voice/ endpoint
     };
 
-    const extractNumber = (text) => {
-        const match = text.match(/\d+(\.\d+)?/);
-        return match ? parseFloat(match[0]) : null;
-    };
-
-    const extractBoolean = (text) => {
-        const lowerText = text.toLowerCase();
-        if (lowerText.includes('yes') || lowerText.includes('yeah') || lowerText.includes('yep')) {
-            return true;
-        }
-        if (lowerText.includes('no') || lowerText.includes('nope') || lowerText.includes('nah')) {
-            return false;
-        }
-        return null;
-    };
-
     const processUserInput = async (text) => {
         addMessage('user', text);
         setIsProcessing(true);
 
-        let value = null;
-        let nextQuestion = null;
-        let responseText = '';
-        let updatedSymptomData = { ...symptomData };
+        try {
+            const response = await processText(text, messages, symptomData);
 
-        switch (currentQuestion) {
-            case 'cycle_gap':
-                value = extractNumber(text);
-                if (value !== null && value > 0 && value < 365) {
-                    updatedSymptomData.cycle_gap_days = Math.round(value);
-                    setSymptomData(updatedSymptomData);
-                    nextQuestion = 'acne';
-                    responseText = 'Got it. Do you currently have acne or skin breakouts?';
-                } else {
-                    responseText = 'I didn\'t quite understand that. Please tell me the number of days since your last period (for example, "30 days" or "45").';
-                }
-                break;
+            // Add Baymax's response
+            if (response.response_text) {
+                setTimeout(() => {
+                    addMessage('assistant', response.response_text);
+                }, 500);
+            }
 
-            case 'acne':
-                value = extractBoolean(text);
-                if (value !== null) {
-                    updatedSymptomData.acne = value;
-                    setSymptomData(updatedSymptomData);
-                    nextQuestion = 'bmi';
-                    responseText = 'Thank you. What is your Body Mass Index (BMI)? If you don\'t know it, you can estimate or say a number between 15 and 40.';
-                } else {
-                    responseText = 'Please answer with yes or no. Do you have acne?';
-                }
-                break;
+            // Update symptom data
+            if (response.extracted_data) {
+                setSymptomData(prev => ({ ...prev, ...response.extracted_data }));
+            }
 
-            case 'bmi':
-                value = extractNumber(text);
-                if (value !== null && value >= 15 && value <= 50) {
-                    updatedSymptomData.bmi = value;
-                    setSymptomData(updatedSymptomData);
-                    nextQuestion = 'stress';
-                    responseText = 'Understood. On a scale of 1 to 10, how would you rate your stress level? (1 being very low, 10 being very high)';
-                } else {
-                    responseText = 'Please provide a valid BMI value between 15 and 50.';
-                }
-                break;
+            // Check if done
+            if (response.ready_for_classification) {
+                console.log('🎯 All data collected via text! Submitting...', response.extracted_data);
 
-            case 'stress':
-                value = extractNumber(text);
-                if (value !== null && value >= 1 && value <= 10) {
-                    updatedSymptomData.stress_level = Math.round(value);
-                    setSymptomData(updatedSymptomData);
-                    nextQuestion = 'sleep';
-                    responseText = 'Got it. Finally, how many hours of sleep do you typically get per night?';
-                } else {
-                    responseText = 'Please provide a stress level between 1 and 10.';
-                }
-                break;
-
-            case 'sleep':
-                value = extractNumber(text);
-                if (value !== null && value >= 0 && value <= 24) {
-                    updatedSymptomData.sleep_hours = value;
-                    setSymptomData(updatedSymptomData);
-
-                    responseText = 'Thank you for providing all the information. Let me analyze your symptoms...';
-                    addMessage('assistant', responseText);
-
-                    // Submit complete data to ML engine
-                    console.log('Submitting complete symptom data:', updatedSymptomData);
-                    await submitSymptoms(updatedSymptomData);
-                    setIsProcessing(false);
-                    setConversationComplete(true);
-                    return;
-                } else {
-                    responseText = 'Please provide a valid number of sleep hours (0-24).';
-                }
-                break;
-
-            default:
-                responseText = 'I\'m not sure what to ask next. Let\'s start over.';
-        }
-
-        setCurrentQuestion(nextQuestion || currentQuestion);
-        setTimeout(() => {
-            addMessage('assistant', responseText);
+                setTimeout(async () => {
+                    await submitSymptoms(response.extracted_data || symptomData);
+                    setCurrentQuestion('support');
+                }, 1500);
+            } else {
+                setIsProcessing(false);
+            }
+        } catch (error) {
+            console.error('Error processing text:', error);
+            addMessage('assistant', 'I apologize, but I encountered an error. Please try again.');
             setIsProcessing(false);
-        }, 500);
+        }
     };
 
     const submitSymptoms = async (data) => {

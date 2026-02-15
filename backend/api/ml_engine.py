@@ -8,14 +8,7 @@ based on symptom data without requiring machine learning models.
 
 def classify_phenotype(symptom_data):
     """
-    Classify PCOS phenotype based on rule-based logic.
-    
-    Returns:
-        dict: {
-            'phenotype': str,
-            'confidence': float (0-100),
-            'reasons': list of str
-        }
+    Classify PCOS phenotype based on strict Rotterdam criteria and deterministic rules.
     """
     # --- 1. Safety Checks (Red Flags) ---
     red_flags = []
@@ -34,18 +27,15 @@ def classify_phenotype(symptom_data):
         }
 
     # --- 2. Extract Key Indicators ---
-    # Cycle Health
     cycle_gap = symptom_data.get('cycle_gap_days') or 28
     regular = symptom_data.get('periods_regular')
     max_gap = symptom_data.get('longest_cycle_gap_last_year') or 0
     
-    # Androgen Signs
     acne = symptom_data.get('acne')
     hair_loss = symptom_data.get('hair_loss')
     facial_hair = symptom_data.get('facial_hair_growth')
     dark_patches = symptom_data.get('dark_patches')
     
-    # Metabolic & Health
     bmi = symptom_data.get('bmi') or 0
     waist = symptom_data.get('waist_cm') or 0
     sugar = symptom_data.get('sugar_cravings')
@@ -53,96 +43,113 @@ def classify_phenotype(symptom_data):
     family_diabetes = symptom_data.get('family_diabetes_history')
     fatigue_meal = symptom_data.get('fatigue_after_meals')
     
-    # Stress/Mood
     stress = symptom_data.get('stress_level') or 0
     sleep = symptom_data.get('sleep_hours') or 0
     mood = symptom_data.get('mood_swings')
 
-    # --- 3. Evaluate Rotterdam Criteria ---
+    # --- 3. Evaluate Rotterdam Criteria (Strict) ---
     # Criterion 1: Ovulatory Dysfunction
+    has_ovulatory_dysfunction = (cycle_gap > 45) or (max_gap > 60) or (regular is False)
     ovulatory_issues = []
-    if cycle_gap > 35 or (regular is False) or max_gap > 45:
-        ovulatory_issues.append("Irregular menstrual cycles")
-    
+    if has_ovulatory_dysfunction:
+        ovulatory_issues.append("Irregular menstrual cycles (Gap > 45d or unpredictable)")
+
     # Criterion 2: Hyperandrogenism (Clinical)
+    has_androgen_signs = acne or hair_loss or facial_hair or dark_patches
     androgen_signs = []
     if acne: androgen_signs.append("Persistent acne")
     if hair_loss: androgen_signs.append("Hair thinning (alopecia)")
-    if facial_hair: androgen_signs.append("Excessive facial/body hair (hirsutism)")
-    # Biochemical hyperandrogenism would go here if we had labs
-    
-    # Criterion 3: Polycystic Ovaries (Proxy via Metabolic/insulin signs)
-    # Without ultrasound, we use strong metabolic indicators as a risk proxy
+    if facial_hair: androgen_signs.append("Hirsutism (excessive hair)")
+    if dark_patches: androgen_signs.append("Acanthosis nigricans")
+
+    # Criterion 3: Polycystic Ovaries (Proxy via Metabolic)
+    # Using BMI >= 27 as strict cutoff per user request
+    has_metabolic_signs = (bmi >= 27) or sugar or weight_gain or (waist > 88) or family_diabetes
     metabolic_signs = []
-    if bmi >= 25: metabolic_signs.append(f"Elevated BMI ({bmi:.1f})")
-    if waist > 80: metabolic_signs.append("Increased waist circumference") # specific to women
-    if dark_patches: metabolic_signs.append("Acanthosis nigricans (insulin resistance sign)")
+    if bmi >= 27: metabolic_signs.append(f"Elevated BMI ({bmi:.1f})")
+    if sugar: metabolic_signs.append("Sugar cravings")
+    if weight_gain: metabolic_signs.append("Unexplained weight gain")
+    if waist > 88: metabolic_signs.append("Increased waist circumference")
     if family_diabetes: metabolic_signs.append("Family history of diabetes")
-    if weight_gain and sugar: metabolic_signs.append("Unexplained weight gain with sugar cravings")
 
-    # Check sufficient evidence (simplified Rotterdam: 2 out of 3)
-    criteria_met_count = 0
-    if ovulatory_issues: criteria_met_count += 1
-    if androgen_signs: criteria_met_count += 1
-    if metabolic_signs: criteria_met_count += 1 # Using metabolic as proxy/risk factor
+    # --- 4. Determine PCOS Likelihood ---
+    criteria_met = 0
+    if has_ovulatory_dysfunction: criteria_met += 1
+    if has_androgen_signs: criteria_met += 1
+    if has_metabolic_signs: criteria_met += 1
 
+    phenotype = "Insufficient Evidence"
     reasons = []
-    phenotype = "Assessment Inconclusive"
     confidence = 0.0
 
-    # --- 4. Phenotype Classification (Deterministic) ---
-    
-    if criteria_met_count >= 2:
-        # PCO Likely - Determine Phenotype
+    # Strict Classification Logic
+    if criteria_met >= 2:
+        # Determine specific phenotype
+        # Type A: Insulin-Resistant (Metabolic + Dark Patches/Sugar)
+        is_insulin = has_metabolic_signs and (dark_patches or sugar)
         
-        # Type A: Insulin-Resistant (Classic)
-        # Needs: Metabolic signs + (Dark patches OR Fatigue after meals OR High waist/BMI)
-        is_insulin = (len(metabolic_signs) >= 2) or dark_patches or (fatigue_meal and weight_gain)
+        # Type B: Inflammatory (Acne + Mood + Fatigue)
+        is_inflammatory = acne and mood and fatigue_meal
         
-        # Type B: Inflammatory
-        # Needs: Acne + (Mood swings OR Fatigue OR Skin issues) + NOT primarily metabolic
-        is_inflammatory = acne and (mood or symptom_data.get('fatigue_after_meals')) and (bmi < 30)
+        # Type C: Adrenal (Stress >= 7 + Sleep <= 5 + Normal BMI)
+        is_adrenal = (stress >= 7) and (sleep <= 5) and (bmi < 25)
         
-        # Type C: Adrenal
-        # Needs: High stress + Normal BMI + Androgen signs active
-        is_adrenal = (stress >= 7) and (bmi < 25) and androgen_signs
-        
-        # Classification Hierarchy
+        # Type D: Lean PCOS (BMI < 24 + Androgen + Ovulatory)
+        is_lean = (bmi < 24) and has_androgen_signs and has_ovulatory_dysfunction
+
         if is_insulin:
             phenotype = "Insulin-Resistant PCOS (Likely)"
-            reasons = metabolic_signs + ["Strong insulin resistance indicators present"]
-            confidence = 85.0
+            reasons = metabolic_signs + ["Strong insulin resistance indicators"]
+            phenotype_bonus = 0.2
         elif is_inflammatory:
             phenotype = "Inflammatory PCOS (Likely)"
-            reasons = androgen_signs + ["Signs of inflammation (acne/mood)"]
-            confidence = 80.0
+            reasons = androgen_signs + ["Signs of inflammation (acne/mood/fatigue)"]
+            phenotype_bonus = 0.15
         elif is_adrenal:
             phenotype = "Adrenal PCOS (Likely)"
-            reasons = ["High stress levels", "Normal BMI"] + androgen_signs
-            confidence = 80.0
+            reasons = ["High stress", "Low sleep", "Normal BMI"] + androgen_signs
+            phenotype_bonus = 0.15
+        elif is_lean:
+            phenotype = "Lean PCOS (Likely)"
+            reasons = ["Normal BMI"] + androgen_signs + ovulatory_issues
+            phenotype_bonus = 0.15
         else:
-            # Fallback for general Rotterdam positive
-            phenotype = "PCOS likely (Unspecified Phenotype)"
-            reasons = ovulatory_issues + androgen_signs + metabolic_signs
-            confidence = 75.0
-            
-    elif criteria_met_count == 1:
-        # At Risk / Pre-PCOS
+            # Fallback based on criteria combination
+            if has_ovulatory_dysfunction and has_androgen_signs:
+                 phenotype = "PCOS Likely (Classic Phenotype)"
+                 reasons = ovulatory_issues + androgen_signs
+                 phenotype_bonus = 0.1
+            else:
+                 phenotype = "Possible PCOS Pattern (Rotterdam Criteria Met)"
+                 reasons = ovulatory_issues + androgen_signs + metabolic_signs
+                 phenotype_bonus = 0.05
+        
+        # Confidence Calculation
+        # Base: Criteria met / 3
+        # Bonus: specific phenotype match
+        # Cap: 0.8 (since no labs)
+        base_confidence = (criteria_met / 3.0) + phenotype_bonus
+        
+        # Completeness Check (reduce if key fields missing)
+        key_fields = [cycle_gap, regular, acne, bmi, stress]
+        completeness = len([f for f in key_fields if f is not None]) / len(key_fields)
+        
+        confidence = min((base_confidence * completeness) * 100, 80.0)
+
+    elif criteria_met == 1:
         phenotype = "Possible PCOS Risk (Insufficient Evidence)"
         reasons = ["Met only 1 of 3 key criteria"] + ovulatory_issues + androgen_signs + metabolic_signs
-        confidence = 50.0
-        
+        confidence = 40.0
+        if has_ovulatory_dysfunction:
+            reasons.append("Irregular cycles alone are not enough for diagnosis.")
+    
     else:
-        # Unlikely
         phenotype = "Low Likelihood of PCOS"
-        reasons = ["Did not meet major clinical criteria (Ovulatory, Androgen, Metabolic)"]
+        reasons = ["Symptoms do not align with Rotterdam criteria"]
         confidence = 90.0
-        
-    # Cap confidence
-    confidence = min(confidence, 95.0)
 
     return {
         'phenotype': phenotype,
-        'confidence': confidence,
+        'confidence': round(confidence, 1),
         'reasons': reasons
     }

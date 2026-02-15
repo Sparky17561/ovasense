@@ -225,50 +225,42 @@ def get_baymax_response(user_text, conversation_history=None, current_data=None)
     current_data = current_data or {}
     
     # Format current status clearly - treat None as MISSING
-    data_status = {
-        'cycle_gap_days': current_data.get('cycle_gap_days') if current_data.get('cycle_gap_days') is not None else 'MISSING',
-        'periods_regular': current_data.get('periods_regular') if current_data.get('periods_regular') is not None else 'MISSING',
-        'acne': current_data.get('acne') if current_data.get('acne') is not None else 'MISSING',
-        'hair_loss': current_data.get('hair_loss') if current_data.get('hair_loss') is not None else 'MISSING',
-        'facial_hair_growth': current_data.get('facial_hair_growth') if current_data.get('facial_hair_growth') is not None else 'MISSING',
-        'bmi': current_data.get('bmi') if current_data.get('bmi') is not None else 'MISSING',
-        'waist_cm': current_data.get('waist_cm') if current_data.get('waist_cm') is not None else 'MISSING',
-        'sugar_cravings': current_data.get('sugar_cravings') if current_data.get('sugar_cravings') is not None else 'MISSING',
-        'weight_gain': current_data.get('weight_gain') if current_data.get('weight_gain') is not None else 'MISSING',
-        'dark_patches': current_data.get('dark_patches') if current_data.get('dark_patches') is not None else 'MISSING',
-        'family_diabetes_history': current_data.get('family_diabetes_history') if current_data.get('family_diabetes_history') is not None else 'MISSING',
-        'stress_level': current_data.get('stress_level') if current_data.get('stress_level') is not None else 'MISSING',
-        'sleep_hours': current_data.get('sleep_hours') if current_data.get('sleep_hours') is not None else 'MISSING',
-        'mood_swings': current_data.get('mood_swings') if current_data.get('mood_swings') is not None else 'MISSING',
-        'pill_usage': current_data.get('pill_usage') if current_data.get('pill_usage') is not None else 'MISSING'
-    }
+    # We must track ALL 20 fields strictly
+    all_fields = [
+        'cycle_gap_days', 'periods_regular', 'longest_cycle_gap_last_year',
+        'acne', 'hair_loss', 'facial_hair_growth', 'bmi', 'waist_cm',
+        'sugar_cravings', 'weight_gain', 'dark_patches', 'family_diabetes_history',
+        'fatigue_after_meals', 'mood_swings', 'stress_level', 'sleep_hours',
+        'heavy_bleeding', 'severe_pelvic_pain', 'possible_pregnancy', 'pill_usage'
+    ]
+    
+    data_status = {}
+    for field in all_fields:
+        val = current_data.get(field)
+        data_status[field] = val if val is not None else 'MISSING'
     
     missing_fields = [k for k, v in data_status.items() if v == 'MISSING']
     collected_fields = [k for k, v in data_status.items() if v != 'MISSING']
     
     # Enhanced prompt with EXACT data status
     context_prompt = system_prompt + f"""
-
+    
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 CURRENT DATA STATUS (EXACT VALUES):
-{chr(10).join([f"✅ {k}: {v}" if v != 'MISSING' else f"❌ {k}: NOT YET COLLECTED" for k, v in data_status.items()])}
-
-COLLECTED: {collected_fields if collected_fields else "NONE"}
-STILL NEED: {missing_fields if missing_fields else "ALL DATA COLLECTED!"}
+📊 STATUS REPORT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ COLLECTED: {collected_fields if collected_fields else "NONE"}
+❌ MISSING (YOU MUST COLLECT THESE): {missing_fields if missing_fields else "ALL DONE"}
 
-INSTRUCTIONS:
-1. Review the transcript causing the update.
-2. If the user just answered a question, acknowledge it briefly with empathy.
-3. Select ONE or TWO missing fields to ask about next. prioritized order:
-   - REGULARITY & CYCLES (Critical): periods_regular, cycle_gap_days
-   - ANDROGEN SIGNS: acne, hirsutism, hair_loss
-   - METABOLIC SIGNS: weight_gain, sugar_cravings, waist_cm, diabetes_history
-   - LIFESTYLE: stress_level, sleep_hours
-4. DO NOT ask about fields that are NOT 'MISSING'.
-5. If the user mentions a "Red Flag" (heavy bleeding, severe pain), advise seeing a doctor immediately.
+⚠️ CRITICAL INSTRUCTION:
+You are in DATA COLLECTION MODE.
+Your ONLY goal is to get values for the MISSING fields above.
+1. Look at the "MISSING" list.
+2. Pick the top 1-2 most important fields from that list (Prioritize: Period Regularity > Androgen signs > Metabolic signs).
+3. Ask the user SPECIFIC questions to get those details.
+4. DO NOT provide advice or analysis yet.
+5. If the user mentions a RED FLAG (heavy bleeding, pain), STOP and advise a doctor.
 
-Keep your response conversational, empathetic, and under 3 sentences.
+Example: If 'acne' and 'weight_gain' are missing, ask: "Have you noticed any changes in your skin like acne, or any unexplained weight gain?"
 """
     
     # Build conversation messages
@@ -311,16 +303,12 @@ Keep your response conversational, empathetic, and under 3 sentences.
             if value is not None:
                 merged_data[key] = value
         
-        # Check if complete (medically sufficient)
-        # We need Critical Cycle Data + Sufficient supporting evidence
-        filled_cnt = len([k for k, v in merged_data.items() if v is not None])
+        # STRICT COMPLETION CHECK
+        # Recalculate missing based on merged_data
+        still_missing = [f for f in all_fields if merged_data.get(f) is None]
         
-        has_cycle_info = (
-            merged_data.get('periods_regular') is not None
-        )
-        
-        # Don't classify if we have less than 10 data points, unless strict flow is done
-        is_complete = (filled_cnt >= 12) and has_cycle_info
+        # Ready only if NOTHING is missing
+        is_complete = len(still_missing) == 0
         
         print(f"📊 Merged data: {merged_data}, Complete: {is_complete}")
         
