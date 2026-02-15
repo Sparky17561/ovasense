@@ -22,6 +22,12 @@ SYMPTOM DATA TO COLLECT (do this naturally, not like a form):
 - BMI or height/weight
 - Stress level (1-10)
 - Sleep hours
+- Sugar cravings (yes/no)
+- Weight gain / difficulty losing weight (yes/no)
+- Hair loss / thinning (yes/no)
+- Dark patches on skin (yes/no)
+- Mood swings / anxiety / depression (yes/no)
+- Recent birth control pill usage (yes/no)
 
 CRITICAL RULES:
 ❌ NEVER correct typos or abbreviations (B.A. clearly means BMI - just accept it!)

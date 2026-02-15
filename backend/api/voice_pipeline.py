@@ -129,22 +129,29 @@ def extract_symptom_data(conversation_history):
     
     extraction_prompt = f"""You are a data extraction AI. Extract PCOS symptom data from this conversation.
 
-Required fields (extract only if mentioned):
+Required fields (extract only if mentioned, including negatives):
 1. cycle_gap_days (int): Days since last period
    - "60 days" = 60
    - "2 months" or "over 2 months" = 60
    - "3 months" or "over 3 months" = 90
    - "4 months" = 120
-2. acne (bool): Has acne/skin issues (any mention of skin problems, acne, breakouts = true)
+2. acne (bool): Has acne/skin issues (true if present, false if explicitly denied)
 3. bmi (float): Calculate from height/weight if given (e.g., 5'11" and 100kg = 31.8), or accept direct BMI values
 4. stress_level (int, 1-10): Stress rating (can be decimals like 9.5, round to 10)
 5. sleep_hours (float): Hours of sleep per night (can extract from "I used to get 8, now 4-5" = 4.5)
+6. sugar_cravings (bool): Cravings for sweets/sugar (true if yes, false if explicitly denied)
+7. weight_gain (bool): Unexplained weight gain or difficulty losing weight (true if yes, false if explicitly denied)
+8. hair_loss (bool): Hair thinning or loss from scalp (true if yes, false if explicitly denied)
+9. dark_patches (bool): Dark patches on skin/neck/armpits (true if yes, false if explicitly denied)
+10. mood_swings (bool): Mood swings, anxiety, depression (true if yes, false if explicitly denied)
+11. pill_usage (bool): Recent birth control pill usage (true if yes, false if explicitly denied)
 
 Conversation:
 {conv_text}
 
 CRITICAL: Output ONLY a single line of valid JSON. NO comments, NO explanations, NO notes.
-Format: {{"cycle_gap_days": <int or null>, "acne": <true/false/null>, "bmi": <float or null>, "stress_level": <int or null>, "sleep_hours": <float or null>}}"""
+If a field is NOT mentioned at all (neither yes nor no), return null.
+Format: {{"cycle_gap_days": <int or null>, "acne": <true/false/null>, "bmi": <float or null>, "stress_level": <int or null>, "sleep_hours": <float or null>, "sugar_cravings": <bool>, "weight_gain": <bool>, "hair_loss": <bool>, "dark_patches": <bool>, "mood_swings": <bool>, "pill_usage": <bool>}}"""
 
     try:
         completion = groq_client.chat.completions.create(
@@ -205,13 +212,19 @@ def get_baymax_response(user_text, conversation_history=None, current_data=None)
     # Determine what's missing with exact values
     current_data = current_data or {}
     
-    # Format current status clearly
+    # Format current status clearly - treat None as MISSING
     data_status = {
-        'cycle_gap_days': current_data.get('cycle_gap_days', 'MISSING'),
-        'acne': current_data.get('acne', 'MISSING'),
-        'bmi': current_data.get('bmi', 'MISSING'),
-        'stress_level': current_data.get('stress_level', 'MISSING'),
-        'sleep_hours': current_data.get('sleep_hours', 'MISSING')
+        'cycle_gap_days': current_data.get('cycle_gap_days') if current_data.get('cycle_gap_days') is not None else 'MISSING',
+        'acne': current_data.get('acne') if current_data.get('acne') is not None else 'MISSING',
+        'bmi': current_data.get('bmi') if current_data.get('bmi') is not None else 'MISSING',
+        'stress_level': current_data.get('stress_level') if current_data.get('stress_level') is not None else 'MISSING',
+        'sleep_hours': current_data.get('sleep_hours') if current_data.get('sleep_hours') is not None else 'MISSING',
+        'sugar_cravings': current_data.get('sugar_cravings') if current_data.get('sugar_cravings') is not None else 'MISSING',
+        'weight_gain': current_data.get('weight_gain') if current_data.get('weight_gain') is not None else 'MISSING',
+        'hair_loss': current_data.get('hair_loss') if current_data.get('hair_loss') is not None else 'MISSING',
+        'dark_patches': current_data.get('dark_patches') if current_data.get('dark_patches') is not None else 'MISSING',
+        'mood_swings': current_data.get('mood_swings') if current_data.get('mood_swings') is not None else 'MISSING',
+        'pill_usage': current_data.get('pill_usage') if current_data.get('pill_usage') is not None else 'MISSING'
     }
     
     missing_fields = [k for k, v in data_status.items() if v == 'MISSING']
@@ -278,11 +291,17 @@ CRITICAL RULES:
         
         # Check if complete
         is_complete = all([
-            merged_data.get('cycle_gap_days'),
+            merged_data.get('cycle_gap_days') is not None,
             merged_data.get('acne') is not None,
-            merged_data.get('bmi'),
-            merged_data.get('stress_level'),
-            merged_data.get('sleep_hours')
+            merged_data.get('bmi') is not None,
+            merged_data.get('stress_level') is not None,
+            merged_data.get('sleep_hours') is not None,
+            merged_data.get('sugar_cravings') is not None,
+            merged_data.get('weight_gain') is not None,
+            merged_data.get('hair_loss') is not None,
+            merged_data.get('dark_patches') is not None,
+            merged_data.get('mood_swings') is not None,
+            merged_data.get('pill_usage') is not None
         ])
         
         print(f"📊 Merged data: {merged_data}, Complete: {is_complete}")

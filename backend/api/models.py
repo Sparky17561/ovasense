@@ -21,6 +21,31 @@ class SymptomLog(models.Model):
     sleep_hours = models.FloatField(
         help_text="Average hours of sleep per night"
     )
+    # New fields for phenotype classification
+    sugar_cravings = models.BooleanField(
+        default=False,
+        help_text="Experiencing sugar cravings"
+    )
+    weight_gain = models.BooleanField(
+        default=False,
+        help_text="Unexplained weight gain or difficulty losing weight"
+    )
+    hair_loss = models.BooleanField(
+        default=False,
+        help_text="Hair thinning or loss from scalp"
+    )
+    dark_patches = models.BooleanField(
+        default=False,
+        help_text="Dark patches on skin (acanthosis nigricans)"
+    )
+    mood_swings = models.BooleanField(
+        default=False,
+        help_text="Mood swings, anxiety, or depression"
+    )
+    pill_usage = models.BooleanField(
+        default=False,
+        help_text="Recent use of birth control pills"
+    )
     created_at = models.DateTimeField(
         auto_now_add=True,
         help_text="Timestamp when log was created"

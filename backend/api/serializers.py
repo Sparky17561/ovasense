@@ -15,6 +15,12 @@ class SymptomLogSerializer(serializers.ModelSerializer):
             'bmi',
             'stress_level',
             'sleep_hours',
+            'sugar_cravings',
+            'weight_gain',
+            'hair_loss',
+            'dark_patches',
+            'mood_swings',
+            'pill_usage',
             'created_at'
         ]
         read_only_fields = ['id', 'created_at']
@@ -52,6 +58,12 @@ class HistorySerializer(serializers.ModelSerializer):
             'bmi',
             'stress_level',
             'sleep_hours',
+            'sugar_cravings',
+            'weight_gain',
+            'hair_loss',
+            'dark_patches',
+            'mood_swings',
+            'pill_usage',
             'created_at',
             'result'
         ]
