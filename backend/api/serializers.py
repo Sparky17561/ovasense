@@ -11,6 +11,8 @@ class SymptomLogSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'cycle_gap_days',
+            'periods_regular',
+            'longest_cycle_gap_last_year',
             'acne',
             'bmi',
             'stress_level',
@@ -18,9 +20,18 @@ class SymptomLogSerializer(serializers.ModelSerializer):
             'sugar_cravings',
             'weight_gain',
             'hair_loss',
+            'facial_hair_growth',
             'dark_patches',
+            'waist_cm',
+            'family_diabetes_history',
+            'fatigue_after_meals',
             'mood_swings',
             'pill_usage',
+            'trying_to_conceive',
+            'spotting_between_periods',
+            'heavy_bleeding',
+            'severe_pelvic_pain',
+            'possible_pregnancy',
             'created_at'
         ]
         read_only_fields = ['id', 'created_at']
@@ -54,6 +65,8 @@ class HistorySerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'cycle_gap_days',
+            'periods_regular',
+            'longest_cycle_gap_last_year',
             'acne',
             'bmi',
             'stress_level',
@@ -61,9 +74,18 @@ class HistorySerializer(serializers.ModelSerializer):
             'sugar_cravings',
             'weight_gain',
             'hair_loss',
+            'facial_hair_growth',
             'dark_patches',
+            'waist_cm',
+            'family_diabetes_history',
+            'fatigue_after_meals',
             'mood_swings',
             'pill_usage',
+            'trying_to_conceive',
+            'spotting_between_periods',
+            'heavy_bleeding',
+            'severe_pelvic_pain',
+            'possible_pregnancy',
             'created_at',
             'result'
         ]

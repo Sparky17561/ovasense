@@ -8,43 +8,107 @@ class SymptomLog(models.Model):
     cycle_gap_days = models.IntegerField(
         help_text="Days between menstrual cycles"
     )
+    # Clinical Indicators (Rotterdam & Phenotype)
+    periods_regular = models.BooleanField(
+        null=True, blank=True,
+        help_text="Are periods regular?"
+    )
+    longest_cycle_gap_last_year = models.IntegerField(
+        null=True, blank=True,
+        help_text="Longest gap between periods in last 12 months"
+    )
+    
+    # Androgen Signs
     acne = models.BooleanField(
-        default=False,
+        null=True, blank=True,
+        default=None,
         help_text="Presence of acne"
     )
-    bmi = models.FloatField(
-        help_text="Body Mass Index"
+    hair_loss = models.BooleanField(
+        null=True, blank=True,
+        default=None,
+        help_text="Hair thinning or loss from scalp"
     )
-    stress_level = models.IntegerField(
-        help_text="Stress level on scale 1-10"
+    facial_hair_growth = models.BooleanField(
+        null=True, blank=True,
+        help_text="Excessive facial or body hair (hirsutism)"
     )
-    sleep_hours = models.FloatField(
-        help_text="Average hours of sleep per night"
+    dark_patches = models.BooleanField(
+        null=True, blank=True,
+        default=None,
+        help_text="Dark patches on skin (acanthosis nigricans)"
     )
-    # New fields for phenotype classification
+    
+    # Metabolic Signs
     sugar_cravings = models.BooleanField(
-        default=False,
+        null=True, blank=True,
+        default=None,
         help_text="Experiencing sugar cravings"
     )
     weight_gain = models.BooleanField(
-        default=False,
+        null=True, blank=True,
+        default=None,
         help_text="Unexplained weight gain or difficulty losing weight"
     )
-    hair_loss = models.BooleanField(
-        default=False,
-        help_text="Hair thinning or loss from scalp"
+    waist_cm = models.IntegerField(
+        null=True, blank=True,
+        help_text="Waist circumference in cm"
     )
-    dark_patches = models.BooleanField(
-        default=False,
-        help_text="Dark patches on skin (acanthosis nigricans)"
+    family_diabetes_history = models.BooleanField(
+        null=True, blank=True,
+        help_text="Family history of diabetes"
     )
+    fatigue_after_meals = models.BooleanField(
+        null=True, blank=True,
+        help_text="Feeling tired after eating"
+    )
+
+    # General Health & Lifestyle
+    bmi = models.FloatField(
+        null=True, blank=True,
+        help_text="Body Mass Index"
+    )
+    stress_level = models.IntegerField(
+        null=True, blank=True,
+        help_text="Stress level (1-10)"
+    )
+    sleep_hours = models.FloatField(
+        null=True, blank=True,
+        help_text="Average sleep hours per night"
+    )
+    
+    # Other Phenotype Flags
     mood_swings = models.BooleanField(
-        default=False,
+        null=True, blank=True,
+        default=None,
         help_text="Mood swings, anxiety, or depression"
     )
     pill_usage = models.BooleanField(
-        default=False,
+        null=True, blank=True,
+        default=None,
         help_text="Recent use of birth control pills"
+    )
+    trying_to_conceive = models.BooleanField(
+        null=True, blank=True,
+        help_text="Active attempt to conceive"
+    )
+    spotting_between_periods = models.BooleanField(
+        null=True, blank=True,
+        help_text="Bleeding between periods"
+    )
+    
+    # Red Flags (Safety Checks)
+    heavy_bleeding = models.BooleanField(
+        null=True, blank=True,
+        help_text="Excessive menstrual bleeding"
+    )
+    severe_pelvic_pain = models.BooleanField(
+        null=True, blank=True,
+        help_text="Severe pelvic pain"
+    )
+    possible_pregnancy = models.BooleanField(
+        null=True, blank=True,
+        help_text="Possibility of pregnancy"
     )
     created_at = models.DateTimeField(
         auto_now_add=True,

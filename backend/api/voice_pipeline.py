@@ -131,20 +131,32 @@ def extract_symptom_data(conversation_history):
 
 Required fields (extract only if mentioned, including negatives):
 1. cycle_gap_days (int): Days since last period
-   - "60 days" = 60
-   - "2 months" or "over 2 months" = 60
-   - "3 months" or "over 3 months" = 90
-   - "4 months" = 120
-2. acne (bool): Has acne/skin issues (true if present, false if explicitly denied)
-3. bmi (float): Calculate from height/weight if given (e.g., 5'11" and 100kg = 31.8), or accept direct BMI values
-4. stress_level (int, 1-10): Stress rating (can be decimals like 9.5, round to 10)
-5. sleep_hours (float): Hours of sleep per night (can extract from "I used to get 8, now 4-5" = 4.5)
-6. sugar_cravings (bool): Cravings for sweets/sugar (true if yes, false if explicitly denied)
-7. weight_gain (bool): Unexplained weight gain or difficulty losing weight (true if yes, false if explicitly denied)
-8. hair_loss (bool): Hair thinning or loss from scalp (true if yes, false if explicitly denied)
-9. dark_patches (bool): Dark patches on skin/neck/armpits (true if yes, false if explicitly denied)
-10. mood_swings (bool): Mood swings, anxiety, depression (true if yes, false if explicitly denied)
-11. pill_usage (bool): Recent birth control pill usage (true if yes, false if explicitly denied)
+2. periods_regular (bool): Are periods irregular/unpredictable? (true=regular, false=irregular)
+3. longest_cycle_gap_last_year (int): Longest gap in days between periods in last year
+4. acne (bool): Has acne/skin issues (true if present, false if explicitly denied)
+5. hair_loss (bool): Hair thinning or loss from scalp
+6. facial_hair_growth (bool): Excessive facial/body hair (hirsutism)
+7. bmi (float): Calculate from height/weight if given
+8. waist_cm (int): Waist circumference in cm
+9. family_diabetes_history (bool): Parents/siblings with diabetes
+10. sugar_cravings (bool): Cravings for sweets/sugar
+11. weight_gain (bool): Unexplained weight gain
+12. fatigue_after_meals (bool): Tiredness after eating
+13. mood_swings (bool): Anxiety, depression, mood swings
+14. dark_patches (bool): Dark skin patches
+15. stress_level (int): 1-10
+16. sleep_hours (float): Hours/night
+17. heavy_bleeding (bool): Soaking through pads quickly / clots > quarter size
+18. severe_pelvic_pain (bool): Debilitating pain
+19. possible_pregnancy (bool): Could be pregnant?
+20. pill_usage (bool): Recent birth control pill usage
+
+Conversation:
+{conv_text}
+
+CRITICAL: Output ONLY a single line of valid JSON.
+If a field is NOT mentioned at all (neither yes nor no), return null.
+Format: {{"cycle_gap_days": <int>, "periods_regular": <bool>, "longest_cycle_gap_last_year": <int>, "acne": <bool>, "hair_loss": <bool>, "facial_hair_growth": <bool>, "bmi": <float>, "waist_cm": <int>, "family_diabetes_history": <bool>, "sugar_cravings": <bool>, "weight_gain": <bool>, "fatigue_after_meals": <bool>, "mood_swings": <bool>, "dark_patches": <bool>, "stress_level": <int>, "sleep_hours": <float>, "heavy_bleeding": <bool>, "severe_pelvic_pain": <bool>, "possible_pregnancy": <bool>, "pill_usage": <bool>}}
 
 Conversation:
 {conv_text}
@@ -215,14 +227,18 @@ def get_baymax_response(user_text, conversation_history=None, current_data=None)
     # Format current status clearly - treat None as MISSING
     data_status = {
         'cycle_gap_days': current_data.get('cycle_gap_days') if current_data.get('cycle_gap_days') is not None else 'MISSING',
+        'periods_regular': current_data.get('periods_regular') if current_data.get('periods_regular') is not None else 'MISSING',
         'acne': current_data.get('acne') if current_data.get('acne') is not None else 'MISSING',
+        'hair_loss': current_data.get('hair_loss') if current_data.get('hair_loss') is not None else 'MISSING',
+        'facial_hair_growth': current_data.get('facial_hair_growth') if current_data.get('facial_hair_growth') is not None else 'MISSING',
         'bmi': current_data.get('bmi') if current_data.get('bmi') is not None else 'MISSING',
-        'stress_level': current_data.get('stress_level') if current_data.get('stress_level') is not None else 'MISSING',
-        'sleep_hours': current_data.get('sleep_hours') if current_data.get('sleep_hours') is not None else 'MISSING',
+        'waist_cm': current_data.get('waist_cm') if current_data.get('waist_cm') is not None else 'MISSING',
         'sugar_cravings': current_data.get('sugar_cravings') if current_data.get('sugar_cravings') is not None else 'MISSING',
         'weight_gain': current_data.get('weight_gain') if current_data.get('weight_gain') is not None else 'MISSING',
-        'hair_loss': current_data.get('hair_loss') if current_data.get('hair_loss') is not None else 'MISSING',
         'dark_patches': current_data.get('dark_patches') if current_data.get('dark_patches') is not None else 'MISSING',
+        'family_diabetes_history': current_data.get('family_diabetes_history') if current_data.get('family_diabetes_history') is not None else 'MISSING',
+        'stress_level': current_data.get('stress_level') if current_data.get('stress_level') is not None else 'MISSING',
+        'sleep_hours': current_data.get('sleep_hours') if current_data.get('sleep_hours') is not None else 'MISSING',
         'mood_swings': current_data.get('mood_swings') if current_data.get('mood_swings') is not None else 'MISSING',
         'pill_usage': current_data.get('pill_usage') if current_data.get('pill_usage') is not None else 'MISSING'
     }
@@ -241,12 +257,18 @@ COLLECTED: {collected_fields if collected_fields else "NONE"}
 STILL NEED: {missing_fields if missing_fields else "ALL DATA COLLECTED!"}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-CRITICAL RULES:
-1. ONLY ask about fields marked "NOT YET COLLECTED"
-2. NEVER ask about fields with actual values
-3. Ask about ONE missing field per response
-4. If NO missing fields, say you're analyzing and wrap up
-5. Be natural and conversational
+INSTRUCTIONS:
+1. Review the transcript causing the update.
+2. If the user just answered a question, acknowledge it briefly with empathy.
+3. Select ONE or TWO missing fields to ask about next. prioritized order:
+   - REGULARITY & CYCLES (Critical): periods_regular, cycle_gap_days
+   - ANDROGEN SIGNS: acne, hirsutism, hair_loss
+   - METABOLIC SIGNS: weight_gain, sugar_cravings, waist_cm, diabetes_history
+   - LIFESTYLE: stress_level, sleep_hours
+4. DO NOT ask about fields that are NOT 'MISSING'.
+5. If the user mentions a "Red Flag" (heavy bleeding, severe pain), advise seeing a doctor immediately.
+
+Keep your response conversational, empathetic, and under 3 sentences.
 """
     
     # Build conversation messages
@@ -289,20 +311,16 @@ CRITICAL RULES:
             if value is not None:
                 merged_data[key] = value
         
-        # Check if complete
-        is_complete = all([
-            merged_data.get('cycle_gap_days') is not None,
-            merged_data.get('acne') is not None,
-            merged_data.get('bmi') is not None,
-            merged_data.get('stress_level') is not None,
-            merged_data.get('sleep_hours') is not None,
-            merged_data.get('sugar_cravings') is not None,
-            merged_data.get('weight_gain') is not None,
-            merged_data.get('hair_loss') is not None,
-            merged_data.get('dark_patches') is not None,
-            merged_data.get('mood_swings') is not None,
-            merged_data.get('pill_usage') is not None
-        ])
+        # Check if complete (medically sufficient)
+        # We need Critical Cycle Data + Sufficient supporting evidence
+        filled_cnt = len([k for k, v in merged_data.items() if v is not None])
+        
+        has_cycle_info = (
+            merged_data.get('periods_regular') is not None
+        )
+        
+        # Don't classify if we have less than 10 data points, unless strict flow is done
+        is_complete = (filled_cnt >= 12) and has_cycle_info
         
         print(f"📊 Merged data: {merged_data}, Complete: {is_complete}")
         

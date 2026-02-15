@@ -1,0 +1,33 @@
+🏥 Running Medical Logic Verification...
+
+Testing: 🔴 Red Flag: Heavy Bleeding...
+   -> Result: Medical Attention Required (100.0%)
+   -> Reasons: ['Red flag symptoms detected: Excessive menstrual bleeding', 'Please consult a doctor immediately.']
+   ✅ PASS
+
+Testing: 🟢 Normal / Low Risk...
+   -> Result: Low Likelihood of PCOS (90.0%)
+   -> Reasons: ['Did not meet major clinical criteria (Ovulatory, Androgen, Metabolic)']
+   ✅ PASS
+
+Testing: 💊 Post-Pill Rebound (Simulated via Rule 1 if exists, otherwise Rotterdam)...
+   -> Result: Possible PCOS Risk (Insufficient Evidence) (50.0%)
+   -> Reasons: ['Met only 1 of 3 key criteria', 'Irregular menstrual cycles']
+   ✅ PASS
+
+Testing: 🩸 Insulin-Resistant Phenotype (Classic)...
+   -> Result: Insulin-Resistant PCOS (Likely) (85.0%)
+   -> Reasons: ['Elevated BMI (32.0)', 'Acanthosis nigricans (insulin resistance sign)', 'Strong insulin resistance indicators present']
+   ✅ PASS
+
+Testing: 🔥 Inflammatory Phenotype...
+   -> Result: Inflammatory PCOS (Likely) (80.0%)
+   -> Reasons: ['Persistent acne', 'Hair thinning (alopecia)', 'Signs of inflammation (acne/mood)']
+   ✅ PASS
+
+Testing: 🧠 Adrenal Phenotype...
+   -> Result: Adrenal PCOS (Likely) (80.0%)
+   -> Reasons: ['High stress levels', 'Normal BMI', 'Excessive facial/body hair (hirsutism)']
+   ✅ PASS
+
+🏁 Results: 6/6 passed.

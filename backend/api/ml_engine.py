@@ -10,14 +10,6 @@ def classify_phenotype(symptom_data):
     """
     Classify PCOS phenotype based on rule-based logic.
     
-    Args:
-        symptom_data (dict): Dictionary containing:
-            - cycle_gap_days (int): Days between periods
-            - acne (bool): Presence of acne
-            - bmi (float): Body Mass Index
-            - stress_level (int): Stress level 1-10
-            - sleep_hours (float): Hours of sleep
-    
     Returns:
         dict: {
             'phenotype': str,
@@ -25,144 +17,129 @@ def classify_phenotype(symptom_data):
             'reasons': list of str
         }
     """
-    cycle_gap = symptom_data.get('cycle_gap_days', 0)
-    acne = symptom_data.get('acne', False)
-    bmi = symptom_data.get('bmi', 0)
-    stress = symptom_data.get('stress_level', 0)
-    sleep = symptom_data.get('sleep_hours', 0)
+    # --- 1. Safety Checks (Red Flags) ---
+    red_flags = []
+    if symptom_data.get('heavy_bleeding'):
+        red_flags.append("Excessive menstrual bleeding")
+    if symptom_data.get('severe_pelvic_pain'):
+        red_flags.append("Severe pelvic pain")
+    if symptom_data.get('possible_pregnancy'):
+        red_flags.append("Possibility of pregnancy")
+        
+    if red_flags:
+        return {
+            'phenotype': "Medical Attention Required",
+            'confidence': 100.0,
+            'reasons': ["Red flag symptoms detected: " + ", ".join(red_flags), "Please consult a doctor immediately."]
+        }
+
+    # --- 2. Extract Key Indicators ---
+    # Cycle Health
+    cycle_gap = symptom_data.get('cycle_gap_days') or 28
+    regular = symptom_data.get('periods_regular')
+    max_gap = symptom_data.get('longest_cycle_gap_last_year') or 0
     
-    # New fields
-    sugar_cravings = symptom_data.get('sugar_cravings', False)
-    weight_gain = symptom_data.get('weight_gain', False)
-    hair_loss = symptom_data.get('hair_loss', False)
-    dark_patches = symptom_data.get('dark_patches', False)
-    mood_swings = symptom_data.get('mood_swings', False)
-    pill_usage = symptom_data.get('pill_usage', False)
+    # Androgen Signs
+    acne = symptom_data.get('acne')
+    hair_loss = symptom_data.get('hair_loss')
+    facial_hair = symptom_data.get('facial_hair_growth')
+    dark_patches = symptom_data.get('dark_patches')
     
+    # Metabolic & Health
+    bmi = symptom_data.get('bmi') or 0
+    waist = symptom_data.get('waist_cm') or 0
+    sugar = symptom_data.get('sugar_cravings')
+    weight_gain = symptom_data.get('weight_gain')
+    family_diabetes = symptom_data.get('family_diabetes_history')
+    fatigue_meal = symptom_data.get('fatigue_after_meals')
+    
+    # Stress/Mood
+    stress = symptom_data.get('stress_level') or 0
+    sleep = symptom_data.get('sleep_hours') or 0
+    mood = symptom_data.get('mood_swings')
+
+    # --- 3. Evaluate Rotterdam Criteria ---
+    # Criterion 1: Ovulatory Dysfunction
+    ovulatory_issues = []
+    if cycle_gap > 35 or (regular is False) or max_gap > 45:
+        ovulatory_issues.append("Irregular menstrual cycles")
+    
+    # Criterion 2: Hyperandrogenism (Clinical)
+    androgen_signs = []
+    if acne: androgen_signs.append("Persistent acne")
+    if hair_loss: androgen_signs.append("Hair thinning (alopecia)")
+    if facial_hair: androgen_signs.append("Excessive facial/body hair (hirsutism)")
+    # Biochemical hyperandrogenism would go here if we had labs
+    
+    # Criterion 3: Polycystic Ovaries (Proxy via Metabolic/insulin signs)
+    # Without ultrasound, we use strong metabolic indicators as a risk proxy
+    metabolic_signs = []
+    if bmi >= 25: metabolic_signs.append(f"Elevated BMI ({bmi:.1f})")
+    if waist > 80: metabolic_signs.append("Increased waist circumference") # specific to women
+    if dark_patches: metabolic_signs.append("Acanthosis nigricans (insulin resistance sign)")
+    if family_diabetes: metabolic_signs.append("Family history of diabetes")
+    if weight_gain and sugar: metabolic_signs.append("Unexplained weight gain with sugar cravings")
+
+    # Check sufficient evidence (simplified Rotterdam: 2 out of 3)
+    criteria_met_count = 0
+    if ovulatory_issues: criteria_met_count += 1
+    if androgen_signs: criteria_met_count += 1
+    if metabolic_signs: criteria_met_count += 1 # Using metabolic as proxy/risk factor
+
     reasons = []
-    phenotype = "Unclassified Type"
-    confidence = 50.0
+    phenotype = "Assessment Inconclusive"
+    confidence = 0.0
+
+    # --- 4. Phenotype Classification (Deterministic) ---
     
-    # ---------------------------------------------------------
-    # Rule 1: Post-Pill PCOS
-    # ---------------------------------------------------------
-    if pill_usage and cycle_gap > 35:
-        phenotype = "Post-Pill PCOS"
-        confidence = 90.0
-        reasons.append("Recent discontinuation of birth control pills")
-        reasons.append(f"Irregular cycles continuing ({cycle_gap} days)")
+    if criteria_met_count >= 2:
+        # PCO Likely - Determine Phenotype
         
-        if acne:
-            reasons.append("Temporary androgen rebound causing acne")
+        # Type A: Insulin-Resistant (Classic)
+        # Needs: Metabolic signs + (Dark patches OR Fatigue after meals OR High waist/BMI)
+        is_insulin = (len(metabolic_signs) >= 2) or dark_patches or (fatigue_meal and weight_gain)
         
-        return {
-            'phenotype': phenotype,
-            'confidence': confidence,
-            'reasons': reasons
-        }
-
-    # ---------------------------------------------------------
-    # Rule 2: Insulin-Resistant PCOS (Most Common)
-    # ---------------------------------------------------------
-    # Indicators: High BMI, Weight Gain, Sugar Cravings, Dark Patches
-    insulin_score = 0
-    insulin_reasons = []
-    
-    if bmi > 25:
-        insulin_score += 2
-        insulin_reasons.append(f"Elevated BMI ({bmi:.1f})")
-    if weight_gain:
-        insulin_score += 3
-        insulin_reasons.append("Unexplained weight gain / difficulty losing weight")
-    if sugar_cravings:
-        insulin_score += 2
-        insulin_reasons.append("Frequent sugar/carb cravings")
-    if dark_patches:
-        insulin_score += 4  # Strong indicator
-        insulin_reasons.append("Acanthosis nigricans (dark skin patches)")
-    if cycle_gap > 40:
-        insulin_score += 1
-        insulin_reasons.append(f"Irregular ovulation ({cycle_gap} days)")
-
-    if insulin_score >= 5:
-        phenotype = "Insulin-Resistant PCOS"
-        confidence = min(60 + (insulin_score * 5), 98.0)
-        reasons = insulin_reasons
-        return {
-            'phenotype': phenotype,
-            'confidence': confidence,
-            'reasons': reasons
-        }
-
-    # ---------------------------------------------------------
-    # Rule 3: Adrenal PCOS
-    # ---------------------------------------------------------
-    # Indicators: High stress, anxiety/mood, sleep issues, often normal BMI
-    adrenal_score = 0
-    adrenal_reasons = []
-    
-    if stress >= 7:
-        adrenal_score += 3
-        adrenal_reasons.append(f"High stress levels ({stress}/10)")
-    if mood_swings:
-        adrenal_score += 2
-        adrenal_reasons.append("Anxiety or mood swings present")
-    if sleep < 6:
-        adrenal_score += 2
-        adrenal_reasons.append(f"Poor sleep quality ({sleep} hours)")
-    if bmi < 25:
-        adrenal_score += 1  # Often lean/normal weight
-        adrenal_reasons.append("Normal BMI range")
-
-    if adrenal_score >= 5:
-        phenotype = "Adrenal PCOS"
-        confidence = min(60 + (adrenal_score * 5), 95.0)
-        reasons = adrenal_reasons
-        return {
-            'phenotype': phenotype,
-            'confidence': confidence,
-            'reasons': reasons
-        }
-
-    # ---------------------------------------------------------
-    # Rule 4: Inflammatory PCOS
-    # ---------------------------------------------------------
-    # Indicators: Severe acne, hair loss, fatigue, skin issues
-    inflammatory_score = 0
-    inflammatory_reasons = []
-    
-    if acne:
-        inflammatory_score += 3
-        inflammatory_reasons.append("Persistent acne/skin inflammation")
-    if hair_loss:
-        inflammatory_score += 3
-        inflammatory_reasons.append("Hair thinning or loss")
-    if bmi > 25 and not weight_gain: # Inflammation can cause weight but distinct from insulin
-        inflammatory_score += 1 
-    if mood_swings: # Inflammation affects brain/mood
-        inflammatory_score += 1
+        # Type B: Inflammatory
+        # Needs: Acne + (Mood swings OR Fatigue OR Skin issues) + NOT primarily metabolic
+        is_inflammatory = acne and (mood or symptom_data.get('fatigue_after_meals')) and (bmi < 30)
         
-    if inflammatory_score >= 5:
-        phenotype = "Inflammatory PCOS"
-        confidence = min(60 + (inflammatory_score * 5), 92.0)
-        reasons = inflammatory_reasons
-        return {
-            'phenotype': phenotype,
-            'confidence': confidence,
-            'reasons': reasons
-        }
-
-    # ---------------------------------------------------------
-    # Default / Low Risk / Mixed
-    # ---------------------------------------------------------
-    if cycle_gap <= 35 and not acne and not hair_loss:
-        phenotype = "Low Risk / No PCOS"
-        confidence = 90.0
-        reasons = ["Regular cycles", "No major hyperandrogenism signs"]
+        # Type C: Adrenal
+        # Needs: High stress + Normal BMI + Androgen signs active
+        is_adrenal = (stress >= 7) and (bmi < 25) and androgen_signs
+        
+        # Classification Hierarchy
+        if is_insulin:
+            phenotype = "Insulin-Resistant PCOS (Likely)"
+            reasons = metabolic_signs + ["Strong insulin resistance indicators present"]
+            confidence = 85.0
+        elif is_inflammatory:
+            phenotype = "Inflammatory PCOS (Likely)"
+            reasons = androgen_signs + ["Signs of inflammation (acne/mood)"]
+            confidence = 80.0
+        elif is_adrenal:
+            phenotype = "Adrenal PCOS (Likely)"
+            reasons = ["High stress levels", "Normal BMI"] + androgen_signs
+            confidence = 80.0
+        else:
+            # Fallback for general Rotterdam positive
+            phenotype = "PCOS likely (Unspecified Phenotype)"
+            reasons = ovulatory_issues + androgen_signs + metabolic_signs
+            confidence = 75.0
+            
+    elif criteria_met_count == 1:
+        # At Risk / Pre-PCOS
+        phenotype = "Possible PCOS Risk (Insufficient Evidence)"
+        reasons = ["Met only 1 of 3 key criteria"] + ovulatory_issues + androgen_signs + metabolic_signs
+        confidence = 50.0
+        
     else:
-        phenotype = "Mixed Phenotype / Unclassified"
-        confidence = 60.0
-        reasons = ["Symptoms do not strongly match a single specific phenotype", "Likely a combination of factors"]
+        # Unlikely
+        phenotype = "Low Likelihood of PCOS"
+        reasons = ["Did not meet major clinical criteria (Ovulatory, Androgen, Metabolic)"]
+        confidence = 90.0
+        
+    # Cap confidence
+    confidence = min(confidence, 95.0)
 
     return {
         'phenotype': phenotype,
