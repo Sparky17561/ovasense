@@ -1,0 +1,65 @@
+.voice-button-container {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.voice-btn {
+    font-size: 1.5rem;
+    background: linear-gradient(135deg, var(--accent-color), var(--primary-color));
+    transition: all 0.3s ease;
+}
+
+.voice-btn:hover:not(:disabled) {
+    transform: scale(1.1);
+}
+
+.voice-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.voice-btn.listening {
+    animation: pulse 1.5s ease-in-out infinite;
+    background: linear-gradient(135deg, var(--danger-color), var(--accent-color));
+    box-shadow: 0 0 30px rgba(239, 71, 111, 0.6);
+}
+
+.voice-btn.recording {
+    animation: pulse 1s ease-in-out infinite;
+    background: linear-gradient(135deg, var(--danger-color), var(--warning-color));
+    box-shadow: 0 0 30px rgba(239, 71, 111, 0.8);
+}
+
+.voice-btn.processing {
+    animation: spin 2s linear infinite;
+    background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.voice-error {
+    position: absolute;
+    bottom: -30px;
+    font-size: 0.75rem;
+    color: var(--danger-color);
+    white-space: nowrap;
+}
+
+.listening-indicator {
+    position: absolute;
+    bottom: -30px;
+    font-size: 0.85rem;
+    color: var(--accent-color);
+    animation: fadeIn 0.3s ease-in;
+}
