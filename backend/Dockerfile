@@ -27,5 +27,5 @@ RUN python manage.py collectstatic --noinput 2>/dev/null || true
 # ---- Expose Port ----
 EXPOSE 8000
 
-# ---- Run with Gunicorn ----
-CMD ["gunicorn", "ovasense_backend.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120"]
+# ---- Run Migrations + Start Gunicorn ----
+CMD python manage.py migrate --noinput && gunicorn ovasense_backend.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120
