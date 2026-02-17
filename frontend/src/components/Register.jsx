@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { registerUser } from "../api";
 import { useNavigate } from "react-router-dom";
+import { Sparkles } from "lucide-react";
 
 export default function Register() {
 
@@ -43,8 +44,11 @@ export default function Register() {
             <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-pink-600/20 rounded-full blur-[120px] pointer-events-none" />
 
             <div className="w-full max-w-md bg-[#111] border border-[#222] rounded-2xl p-8 shadow-2xl relative z-10 backdrop-blur-sm">
-                
-                <div className="text-center mb-8">
+
+                <div className="text-center mb-8 flex flex-col items-center">
+                    <div className="w-12 h-12 bg-gradient-to-br from-[#ff2d78] to-purple-600 rounded-2xl flex items-center justify-center shadow-xl shadow-[#ff2d78]/20 mb-4">
+                        <Sparkles className="w-7 h-7 text-white" />
+                    </div>
                     <h1 className="text-3xl font-bold mb-2 font-['Lora'] bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">
                         Create Account
                     </h1>
@@ -56,7 +60,7 @@ export default function Register() {
                 <form onSubmit={handleSubmit} className="space-y-4">
 
                     <div className="grid grid-cols-2 gap-4">
-                         <div className="col-span-2">
+                        <div className="col-span-2">
                             <input
                                 placeholder="Full Name"
                                 value={name}
@@ -64,7 +68,7 @@ export default function Register() {
                                 className="w-full bg-[#1a1a1a] border border-[#333] text-white px-4 py-3 rounded-xl focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all placeholder-gray-600"
                             />
                         </div>
-                   
+
                         <input
                             type="number"
                             placeholder="Age"
@@ -104,7 +108,7 @@ export default function Register() {
                         />
                     </div>
 
-                    <button 
+                    <button
                         className="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-semibold py-3 rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-pink-500/25 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
                         disabled={loading}
                     >

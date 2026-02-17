@@ -20,14 +20,15 @@ import Login from "./components/Login";
 import Register from "./components/Register";
 import LandingPage from "./pages/LandingPage";
 
-import { 
-    LayoutDashboard, 
-    Microscope, 
-    BookOpen, 
-    Calendar, 
-    Bot, 
-    Menu, 
-    X 
+import {
+    LayoutDashboard,
+    Microscope,
+    BookOpen,
+    Calendar,
+    Bot,
+    Menu,
+    X,
+    Sparkles
 } from "lucide-react";
 
 import "./index.css";
@@ -77,14 +78,14 @@ function Sidebar({ isOpen, onClose }) {
         <>
             {/* Mobile Overlay */}
             {isOpen && (
-                <div 
+                <div
                     className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
                     onClick={onClose}
                 />
             )}
 
             {/* Sidebar Container */}
-            <aside 
+            <aside
                 className={`
                     fixed md:static inset-y-0 left-0 z-50 w-64 bg-[#0f0f0f] border-r border-[#222] flex flex-col transition-transform duration-300 ease-in-out
                     ${isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
@@ -92,10 +93,15 @@ function Sidebar({ isOpen, onClose }) {
             >
                 {/* Logo */}
                 <div className="p-6 border-b border-[#222] flex items-center justify-between">
-                    <h1 className="text-2xl font-bold font-['Lora'] tracking-tight text-white">
-                        Ova<span className="text-[#ff2d78]">Sense</span>
-                    </h1>
-                    <button onClick={onClose} className="md:hidden text-gray-400 hover:text-white">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-gradient-to-br from-[#ff2d78] to-purple-600 rounded-lg flex items-center justify-center shadow-lg shadow-[#ff2d78]/20">
+                            <Sparkles className="w-5 h-5 text-white" />
+                        </div>
+                        <h1 className="text-2xl font-bold font-['Lora'] tracking-tight text-white">
+                            Ova<span className="text-[#ff2d78]">Sense</span>
+                        </h1>
+                    </div>
+                    <button onClick={onClose} className="md:hidden text-gray-400 hover:text-white transition-colors">
                         <X className="w-6 h-6" />
                     </button>
                 </div>
@@ -109,8 +115,8 @@ function Sidebar({ isOpen, onClose }) {
                             onClick={() => onClose()} // Close on mobile when clicked
                             className={({ isActive }) =>
                                 `flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm
-                                ${isActive 
-                                    ? "bg-[#ff2d78]/10 text-[#ff2d78] border border-[#ff2d78]/20" 
+                                ${isActive
+                                    ? "bg-[#ff2d78]/10 text-[#ff2d78] border border-[#ff2d78]/20"
                                     : "text-gray-400 hover:bg-[#1a1a1a] hover:text-white border border-transparent"}
                                 `
                             }
@@ -138,19 +144,24 @@ function AppLayout() {
 
     return (
         <div className="flex h-screen bg-[#0a0a0a] overflow-hidden">
-            
+
             {/* Sidebar */}
             <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col h-full overflow-hidden relative w-full">
-                
+
                 {/* Mobile Header / Hamburger */}
                 <div className="md:hidden p-4 flex items-center justify-between border-b border-[#222] bg-[#0a0a0a]/80 backdrop-blur-md sticky top-0 z-30">
-                    <h1 className="text-xl font-bold font-['Lora'] text-white">
-                        Ova<span className="text-[#ff2d78]">Sense</span>
-                    </h1>
-                    <button 
+                    <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 bg-gradient-to-br from-[#ff2d78] to-purple-600 rounded-lg flex items-center justify-center">
+                            <Sparkles className="w-4 h-4 text-white" />
+                        </div>
+                        <h1 className="text-xl font-bold font-['Lora'] text-white">
+                            Ova<span className="text-[#ff2d78]">Sense</span>
+                        </h1>
+                    </div>
+                    <button
                         onClick={() => setSidebarOpen(true)}
                         className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-[#1a1a1a]"
                     >

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { loginUser, getMe } from "../api";
 import { useNavigate } from "react-router-dom";
+import { Sparkles } from "lucide-react";
 
 export default function Login() {
     const [username, setUsername] = useState("");
@@ -39,13 +40,16 @@ export default function Login() {
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] p-4 relative overflow-hidden">
-             {/* Background Gradients */}
-             <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-purple-600/20 rounded-full blur-[120px] pointer-events-none" />
-             <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-pink-600/20 rounded-full blur-[120px] pointer-events-none" />
+            {/* Background Gradients */}
+            <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-purple-600/20 rounded-full blur-[120px] pointer-events-none" />
+            <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-pink-600/20 rounded-full blur-[120px] pointer-events-none" />
 
             <div className="w-full max-w-md bg-[#111] border border-[#222] rounded-2xl p-8 shadow-2xl relative z-10 backdrop-blur-sm">
-                
-                <div className="text-center mb-8">
+
+                <div className="text-center mb-8 flex flex-col items-center">
+                    <div className="w-12 h-12 bg-gradient-to-br from-[#ff2d78] to-purple-600 rounded-2xl flex items-center justify-center shadow-xl shadow-[#ff2d78]/20 mb-4">
+                        <Sparkles className="w-7 h-7 text-white" />
+                    </div>
                     <h1 className="text-3xl font-bold mb-2 font-['Lora'] bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">
                         Welcome Back
                     </h1>
@@ -77,7 +81,7 @@ export default function Login() {
                         />
                     </div>
 
-                    <button 
+                    <button
                         className="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-semibold py-3 rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-pink-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
                         disabled={loading}
                     >
