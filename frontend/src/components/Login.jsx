@@ -22,11 +22,13 @@ export default function Login() {
 
             // 3️⃣ Check session
             const me = await getMe();
+            console.log("🔍 [DEBUG] Session Check:", me);
 
             if (me.authenticated) {
                 navigate("/dashboard", { replace: true });
                 window.location.reload();   // refresh ProtectedRoute
             } else {
+                console.error("❌ [DEBUG] Session check failed after login");
                 alert("Login failed. Session not created.");
             }
 

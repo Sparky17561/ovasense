@@ -39,18 +39,14 @@ INSTALLED_APPS = [
 # MIDDLEWARE
 # ===============================
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",  # 🔥 MUST BE AT TOP
     "api.middleware.DisableCSRFMiddleware",
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",  # Serve static files in production
-
-    "corsheaders.middleware.CorsMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
 
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-
-    # "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -160,10 +156,11 @@ if not DEBUG:
     CSRF_COOKIE_SAMESITE = "None"
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    # Important for Render's load balancer
+    # Important for Render/Vercel
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_DOMAIN = None  # Allow cross-domain
+    SESSION_SAVE_EVERY_REQUEST = True
+    SESSION_COOKIE_AGE = 1209600 # 2 weeks
 else:
     SESSION_COOKIE_SAMESITE = "Lax"
     CSRF_COOKIE_SAMESITE = "Lax"
