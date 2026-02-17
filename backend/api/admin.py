@@ -19,32 +19,35 @@ class PhenotypeResultAdmin(admin.ModelAdmin):
     search_fields = ['phenotype']
 
 
-# ============================================================
-# NEW ADMIN REGISTRATIONS (Phase 2)
-# ============================================================
+# ================= USER PROFILE =================
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ['user_id', 'name', 'age', 'last_phenotype', 'created_at']
-    search_fields = ['user_id', 'name']
-    list_filter = ['created_at']
+    list_display = ['user', 'name', 'age']
+    search_fields = ['user__username', 'name']
 
+
+# ================= CYCLE =================
 
 @admin.register(CycleRecord)
 class CycleRecordAdmin(admin.ModelAdmin):
     list_display = ['id', 'user', 'start_date', 'end_date', 'flow_intensity', 'predicted']
     list_filter = ['predicted', 'start_date', 'flow_intensity']
-    search_fields = ['user__name', 'user__user_id']
+    search_fields = ['user__username', 'user__profile__name']
     date_hierarchy = 'start_date'
 
+
+# ================= HEALTH =================
 
 @admin.register(HealthMetric)
 class HealthMetricAdmin(admin.ModelAdmin):
     list_display = ['id', 'user', 'date', 'metric_type', 'value']
     list_filter = ['metric_type', 'date']
-    search_fields = ['user__name', 'user__user_id']
+    search_fields = ['user__username', 'user__profile__name']
     date_hierarchy = 'date'
 
+
+# ================= ARTICLES =================
 
 @admin.register(KnowledgeArticle)
 class KnowledgeArticleAdmin(admin.ModelAdmin):

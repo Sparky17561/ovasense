@@ -1,176 +1,193 @@
 """
-Rule-based PCOS phenotype classification engine.
-
-This module provides explainable AI logic for classifying PCOS phenotypes
-based on symptom data without requiring machine learning models.
+OvaSense ML Engine
+Hybrid PCOS Intelligence Engine
 """
 
+import os
+import json
+from groq import Groq
+from dotenv import load_dotenv
 
-def classify_phenotype(symptom_data):
-    """
-    Classify PCOS phenotype based on strict Rotterdam criteria, differential diagnosis, and rule versioning.
-    Rule Version: 1.1.0
-    """
-    RULE_VERSION = "1.1.0"
-    
-    # --- 1. Data Quality & Completeness Score ---
-    required_fields = [
-        'cycle_gap_days', 'periods_regular', 'acne', 'hair_loss', 
-        'facial_hair_growth', 'bmi', 'waist_cm', 'stress_level', 'sleep_hours'
-    ]
-    valid_inputs = len([k for k in required_fields if symptom_data.get(k) is not None])
-    data_quality_score = int((valid_inputs / len(required_fields)) * 100)
+load_dotenv()
 
-    # --- 2. Safety Checks (Red Flags) ---
-    red_flags = []
-    if symptom_data.get('heavy_bleeding'): red_flags.append("Excessive menstrual bleeding")
-    if symptom_data.get('severe_pelvic_pain'): red_flags.append("Severe pelvic pain")
-    if symptom_data.get('possible_pregnancy'): red_flags.append("Possibility of pregnancy")
-    # Quick medical reject for impossible values
-    bmi = symptom_data.get('bmi') or 0
-    if bmi > 60: red_flags.append(f"bmi {bmi} requires clinical verification")
-        
-    if red_flags:
-        return {
-            'phenotype': "Medical Attention Required",
-            'confidence': 100.0,
-            'reasons': ["Red flag symptoms detected: " + ", ".join(red_flags), "Please consult a doctor immediately."],
-            'data_quality_score': data_quality_score,
-            'rule_version': RULE_VERSION,
-            'differential_diagnosis': "Urgent Medical Review"
-        }
 
-    # --- 3. Differential Diagnosis (Rule Out) ---
-    differential_flags = []
-    if symptom_data.get('thyroid_history'): differential_flags.append("Thyroid History")
-    if symptom_data.get('recent_major_stress_event'): differential_flags.append("Recent Major Stress")
-    if symptom_data.get('recent_travel_or_illness'): differential_flags.append("Recent Travel/Illness")
-    
-    # Duration Check (Acute vs Chronic)
-    is_chronic = True
-    cycle_duration = symptom_data.get('cycle_irregularity_duration_months') or 0
-    if cycle_duration > 0 and cycle_duration < 3:
-        differential_flags.append("Short duration symptoms (< 3 months)")
-        is_chronic = False
+# ============================================================
+# SAFE JSON PARSER
+# ============================================================
 
-    # --- 4. Evaluate Rotterdam Criteria (Strict) ---
-    cycle_gap = symptom_data.get('cycle_gap_days') or 28
-    regular = symptom_data.get('periods_regular')
-    max_gap = symptom_data.get('longest_cycle_gap_last_year') or 0
-    
-    # Criterion 1: Ovulatory Dysfunction (MUST be persistent/chronic)
-    has_ovulatory_dysfunction = ((cycle_gap > 45) or (max_gap > 60) or (regular is False)) and is_chronic
-    ovulatory_issues = []
-    if has_ovulatory_dysfunction:
-        ovulatory_issues.append("Persistent irregular menstrual cycles")
+def safe_json_parse(text):
+    if not text:
+        return {}
 
-    # Criterion 2: Hyperandrogenism
-    acne = symptom_data.get('acne')
-    hair_loss = symptom_data.get('hair_loss')
-    facial_hair = symptom_data.get('facial_hair_growth')
-    dark_patches = symptom_data.get('dark_patches')
-    
-    has_androgen_signs = acne or hair_loss or facial_hair or dark_patches
-    androgen_signs = []
-    if acne: androgen_signs.append("Persistent acne")
-    if hair_loss: androgen_signs.append("Hair thinning")
-    if facial_hair: androgen_signs.append("Hirsutism")
-    if dark_patches: androgen_signs.append("Acanthosis nigricans")
+    text = text.strip()
 
-    # Criterion 3: Metabolic (Proxy for Polycystic Ovaries)
-    waist = symptom_data.get('waist_cm') or 0
-    sugar = symptom_data.get('sugar_cravings')
-    weight_gain = symptom_data.get('weight_gain')
-    family_diabetes = symptom_data.get('family_diabetes_history')
-    
-    # Increased metabolic cutoff
-    has_metabolic_signs = (bmi >= 27) or (waist > 88) or family_diabetes
-    metabolic_signs = []
-    if bmi >= 27: metabolic_signs.append(f"Elevated BMI ({bmi:.1f})")
-    if waist > 88: metabolic_signs.append(f"Increased waist circumference ({waist}cm)")
-    if family_diabetes: metabolic_signs.append("Family history of diabetes")
+    if "```" in text:
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
 
-    # --- 5. Classification Logic ---
-    criteria_met = 0
-    if has_ovulatory_dysfunction: criteria_met += 1
-    if has_androgen_signs: criteria_met += 1
-    if has_metabolic_signs: criteria_met += 1
+    try:
+        return json.loads(text)
+    except Exception as e:
+        print("❌ JSON parse failed:", e)
+        print("RAW:", text)
+        return {}
 
-    phenotype = "Assessment Inconclusive"
+
+# ============================================================
+# RULE ENGINE
+# ============================================================
+
+def rule_based_classification(symptom_data):
+
+    bmi = symptom_data.get("bmi") or 0
+    regular = symptom_data.get("periods_regular")
+    acne = symptom_data.get("acne")
+    hair = symptom_data.get("facial_hair_growth")
+    dark = symptom_data.get("dark_patches")
+    stress = symptom_data.get("stress_level", 0)
+    sleep = symptom_data.get("sleep_hours", 8)
+
+    ovulatory = regular is False
+    androgen = acne or hair or dark
+    metabolic = bmi >= 27 or dark
+
+    criteria = sum([ovulatory, androgen, metabolic])
+
+    phenotype = "Low Likelihood of PCOS"
     reasons = []
-    confidence = 0.0
-    differential_diagnosis = None
 
-    # Priority 1: Short Duration Override (Acute vs Chronic)
-    if not is_chronic:
-        phenotype = "Possible Temporary Hormonal Imbalance"
-        reasons = differential_flags + ["Symptoms are recent (< 3 months). Monitor for 3 more months."]
-        confidence = 60.0
-        differential_diagnosis = ", ".join(differential_flags)
+    if criteria >= 2:
 
-    # Priority 2: PCOS Diagnosis (Requires 2+ Criteria)
-    elif criteria_met >= 2:
-        # Sub-typing (same as before)
-        is_insulin = has_metabolic_signs and (dark_patches or sugar)
-        is_inflammatory = acne and symptom_data.get('mood_swings') and symptom_data.get('fatigue_after_meals')
-        is_adrenal = (symptom_data.get('stress_level', 0) >= 7) and (symptom_data.get('sleep_hours', 8) <= 5) and (bmi < 25)
-        is_lean = (bmi < 24) and has_androgen_signs and has_ovulatory_dysfunction
+        if metabolic and dark:
+            phenotype = "Insulin-Resistant PCOS"
+            reasons = ["Dark patches", "High BMI", "Insulin markers"]
 
-        base_phenotype = "Likely PCOS"
-        
-        if is_insulin:
-            phenotype = "Insulin-Resistant PCOS Impact"
-            reasons = metabolic_signs + ["Insulin resistance markers"]
-        elif is_inflammatory:
-            phenotype = "Inflammatory PCOS Impact"
-            reasons = androgen_signs + ["Inflammatory markers (mood/fatigue)"]
-        elif is_adrenal:
-            phenotype = "Adrenal PCOS Impact"
-            reasons = ["High stress biomarkers", "Sleep deprivation"] + androgen_signs
-        elif is_lean:
-            phenotype = "Lean PCOS Impact"
-            reasons = ["Normal BMI"] + androgen_signs
+        elif stress >= 7 and sleep <= 5 and bmi < 25:
+            phenotype = "Adrenal PCOS"
+            reasons = ["High stress", "Low sleep"]
+
+        elif bmi < 24 and androgen:
+            phenotype = "Lean PCOS"
+            reasons = ["Normal BMI with androgen symptoms"]
+
+        elif acne:
+            phenotype = "Inflammatory PCOS"
+            reasons = ["Acne + inflammation"]
+
         else:
-            phenotype = "Likely PCOS (Classic Pattern)"
-            reasons = ovulatory_issues + androgen_signs + metabolic_signs
-
-        # Handle Co-morbidities (Thyroid/Stress) without overriding PCOS
-        if differential_flags:
-            phenotype += " (Complex Case)"
-            reasons.append(f"⚠️ Complicating factors: {', '.join(differential_flags)}")
-            differential_diagnosis = ", ".join(differential_flags)
-            confidence = 70.0 # Cap slightly lower due to complexity
-        else:
-            # Standard Confidence Calculation
-            base_confidence = 65.0 + (criteria_met * 10)
-            confidence = min(base_confidence * (data_quality_score / 100.0), 85.0)
-
-    # Priority 3: Differential Override (If NOT meeting PCOS criteria)
-    elif differential_flags:
-        phenotype = "Likely Non-PCOS Hormonal Issue"
-        reasons = differential_flags + ["Symptoms do not meet full PCOS criteria"]
-        confidence = 65.0
-        differential_diagnosis = ", ".join(differential_flags)
-
-    # Priority 4: Single Symptom (Hormonal Imbalance)
-    elif criteria_met == 1:
-        phenotype = "Hormonal Imbalance (Not PCOS)"
-        reasons = ["Only 1 of 3 Rotterdam criteria met"] + ovulatory_issues + androgen_signs
-        confidence = 50.0
+            phenotype = "Likely PCOS"
+            reasons = ["Multiple Rotterdam criteria met"]
 
     else:
-        phenotype = "Low Likelihood of PCOS"
-        reasons = ["Symptoms do not align with clinical criteria"]
-        confidence = 90.0
+        reasons = ["Not enough Rotterdam criteria"]
 
-    # Ensure disclaimer is always present (in reasons or UI, but here we enforce logic)
-    reasons.append("⚠️ Educational guidance only. Not a medical diagnosis.")
+    confidence = min(95, 60 + criteria * 10)
 
     return {
-        'phenotype': phenotype,
-        'confidence': round(confidence, 1),
-        'reasons': reasons,
-        'data_quality_score': data_quality_score,
-        'rule_version': RULE_VERSION,
-        'differential_diagnosis': differential_diagnosis
+        "phenotype": phenotype,
+        "confidence": confidence,
+        "rule_version": "2.1.0",
+        "reasons": reasons
+    }
+
+
+# ============================================================
+# LLM EXPLANATION
+# ============================================================
+
+def generate_llm_explanation(symptom_data, phenotype):
+
+    try:
+        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+        prompt = f"""
+Explain WHY this PCOS phenotype was predicted.
+
+Phenotype:
+{phenotype}
+
+Symptoms:
+{json.dumps(symptom_data, indent=2)}
+
+Keep it short.
+"""
+
+        chat = client.chat.completions.create(
+            model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=300,
+        )
+
+        return chat.choices[0].message.content.strip()
+
+    except Exception as e:
+        print("⚠️ Explanation LLM failed:", e)
+        return "AI explanation unavailable."
+
+
+# ============================================================
+# PREDICTIVE LAYER
+# ============================================================
+
+def generate_predictive_analysis(symptom_data, phenotype):
+
+    try:
+        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+        prompt = f"""
+Predict PCOS risk for next 3-6 months.
+
+Phenotype: {phenotype}
+
+Symptoms:
+{json.dumps(symptom_data, indent=2)}
+
+Return ONLY JSON:
+{{
+ "future_risk_score": number,
+ "mixed_pcos_types": ["type"],
+ "recommended_lab_tests": ["test"],
+ "priority_lifestyle_changes": ["action"],
+ "reasoning": "short"
+}}
+"""
+
+        chat = client.chat.completions.create(
+            model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            max_tokens=400,
+        )
+
+        return safe_json_parse(chat.choices[0].message.content)
+
+    except Exception as e:
+        print("⚠️ Predictive LMM failed:", e)
+        return {}
+
+
+# ============================================================
+# MAIN ENTRY
+# ============================================================
+
+def classify_phenotype(symptom_data):
+
+    rule = rule_based_classification(symptom_data)
+
+    explanation = generate_llm_explanation(symptom_data, rule["phenotype"])
+    predictive = generate_predictive_analysis(symptom_data, rule["phenotype"])
+
+    return {
+        "phenotype": rule["phenotype"],
+        "confidence": rule["confidence"],
+        "rule_version": rule["rule_version"],
+        "reasons": rule.get("reasons", ["No explanation generated"]),
+        "ai_explanation": explanation,
+        "future_risk_score": predictive.get("future_risk_score"),
+        "mixed_pcos_types": predictive.get("mixed_pcos_types", []),
+        "recommended_lab_tests": predictive.get("recommended_lab_tests", []),
+        "priority_lifestyle_changes": predictive.get("priority_lifestyle_changes", []),
+        "predictive_reasoning": predictive.get("reasoning"),
     }

@@ -1,248 +1,173 @@
 from django.db import models
 
 
+from django.db import models
+
+
 class SymptomLog(models.Model):
     """
     Stores user symptom data collected through Baymax assistant.
+    Designed for:
+    • All 4 PCOS phenotypes
+    • Mixed PCOS detection
+    • Predictive healthcare
+    • LLM explainability
     """
-    cycle_gap_days = models.IntegerField(
-        help_text="Days between menstrual cycles"
-    )
-    # Clinical Indicators (Rotterdam & Phenotype)
-    periods_regular = models.BooleanField(
+
+    # =========================================================
+    # 1️⃣ MENSTRUAL CYCLE
+    # =========================================================
+    cycle_gap_days = models.IntegerField(help_text="Days between menstrual cycles")
+    periods_regular = models.BooleanField(null=True, blank=True)
+    longest_cycle_gap_last_year = models.IntegerField(null=True, blank=True)
+
+    cycle_irregularity_duration_months = models.IntegerField(null=True, blank=True)
+
+    spotting_between_periods = models.BooleanField(null=True, blank=True)
+
+    # =========================================================
+    # 2️⃣ ANDROGEN SIGNS
+    # =========================================================
+    acne = models.BooleanField(null=True, blank=True)
+    acne_duration_months = models.IntegerField(null=True, blank=True)
+
+    hair_loss = models.BooleanField(null=True, blank=True)
+    facial_hair_growth = models.BooleanField(null=True, blank=True)
+    dark_patches = models.BooleanField(null=True, blank=True)  # insulin marker
+
+    # =========================================================
+    # 3️⃣ METABOLIC SIGNS
+    # =========================================================
+    bmi = models.FloatField(null=True, blank=True)
+    waist_cm = models.IntegerField(null=True, blank=True)
+
+    weight_gain = models.BooleanField(null=True, blank=True)
+    weight_gain_duration_months = models.IntegerField(null=True, blank=True)
+    sudden_weight_change = models.BooleanField(null=True, blank=True)
+
+    sugar_cravings = models.BooleanField(null=True, blank=True)
+    fatigue_after_meals = models.BooleanField(null=True, blank=True)
+    family_diabetes_history = models.BooleanField(null=True, blank=True)
+
+    # =========================================================
+    # 4️⃣ LIFESTYLE (Adrenal / Inflammatory PCOS)
+    # =========================================================
+    stress_level = models.IntegerField(null=True, blank=True)
+    sleep_hours = models.FloatField(null=True, blank=True)
+    mood_swings = models.BooleanField(null=True, blank=True)
+
+    exercise_days_per_week = models.IntegerField(null=True, blank=True)
+    processed_food_intake = models.BooleanField(null=True, blank=True)
+    chronic_inflammation_symptoms = models.BooleanField(
         null=True, blank=True,
-        help_text="Are periods regular?"
-    )
-    longest_cycle_gap_last_year = models.IntegerField(
-        null=True, blank=True,
-        help_text="Longest gap between periods in last 12 months"
-    )
-    
-    # Androgen Signs
-    acne = models.BooleanField(
-        null=True, blank=True,
-        default=None,
-        help_text="Presence of acne"
-    )
-    hair_loss = models.BooleanField(
-        null=True, blank=True,
-        default=None,
-        help_text="Hair thinning or loss from scalp"
-    )
-    facial_hair_growth = models.BooleanField(
-        null=True, blank=True,
-        help_text="Excessive facial or body hair (hirsutism)"
-    )
-    dark_patches = models.BooleanField(
-        null=True, blank=True,
-        default=None,
-        help_text="Dark patches on skin (acanthosis nigricans)"
-    )
-    
-    # Metabolic Signs
-    sugar_cravings = models.BooleanField(
-        null=True, blank=True,
-        default=None,
-        help_text="Experiencing sugar cravings"
-    )
-    weight_gain = models.BooleanField(
-        null=True, blank=True,
-        default=None,
-        help_text="Unexplained weight gain or difficulty losing weight"
-    )
-    waist_cm = models.IntegerField(
-        null=True, blank=True,
-        help_text="Waist circumference in cm"
-    )
-    family_diabetes_history = models.BooleanField(
-        null=True, blank=True,
-        help_text="Family history of diabetes"
-    )
-    fatigue_after_meals = models.BooleanField(
-        null=True, blank=True,
-        help_text="Feeling tired after eating"
+        help_text="Joint pain, gut issues, bloating, etc."
     )
 
-    # General Health & Lifestyle
-    bmi = models.FloatField(
-        null=True, blank=True,
-        help_text="Body Mass Index"
-    )
-    stress_level = models.IntegerField(
-        null=True, blank=True,
-        help_text="Stress level (1-10)"
-    )
-    sleep_hours = models.FloatField(
-        null=True, blank=True,
-        help_text="Average sleep hours per night"
-    )
-    
-    # Other Phenotype Flags
-    mood_swings = models.BooleanField(
-        null=True, blank=True,
-        default=None,
-        help_text="Mood swings, anxiety, or depression"
-    )
-    pill_usage = models.BooleanField(
-        null=True, blank=True,
-        default=None,
-        help_text="Recent use of birth control pills"
-    )
-    trying_to_conceive = models.BooleanField(
-        null=True, blank=True,
-        help_text="Active attempt to conceive"
-    )
-    spotting_between_periods = models.BooleanField(
-        null=True, blank=True,
-        help_text="Bleeding between periods"
-    )
-    
-    # Red Flags (Safety Checks)
-    heavy_bleeding = models.BooleanField(
-        null=True, blank=True,
-        help_text="Excessive menstrual bleeding"
-    )
-    severe_pelvic_pain = models.BooleanField(
-        null=True, blank=True,
-        help_text="Severe pelvic pain"
-    )
-    possible_pregnancy = models.BooleanField(
-        null=True, blank=True,
-        help_text="Possibility of pregnancy"
-    )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="Timestamp when log was created"
-    )
+    # =========================================================
+    # 5️⃣ FERTILITY
+    # =========================================================
+    trying_to_conceive = models.BooleanField(null=True, blank=True)
+    miscarriages = models.IntegerField(null=True, blank=True)
+    infertility_years = models.IntegerField(null=True, blank=True)
 
-    # Duration Tracking (for Acute vs Chronic check)
-    cycle_irregularity_duration_months = models.IntegerField(
-        null=True, blank=True,
-        help_text="How long irregular cycles have persisted (months)"
-    )
-    acne_duration_months = models.IntegerField(
-        null=True, blank=True,
-        help_text="How long acne has persisted (months)"
-    )
-    weight_gain_duration_months = models.IntegerField(
-        null=True, blank=True,
-        help_text="How long weight gain has persisted (months)"
-    )
+    # =========================================================
+    # 6️⃣ MEDICAL HISTORY
+    # =========================================================
+    pill_usage = models.BooleanField(null=True, blank=True)
+    thyroid_history = models.BooleanField(null=True, blank=True)
+    recent_major_stress_event = models.BooleanField(null=True, blank=True)
+    recent_travel_or_illness = models.BooleanField(null=True, blank=True)
 
-    # Differential Diagnosis Flags
-    recent_major_stress_event = models.BooleanField(
-        null=True, blank=True,
-        help_text="Major stress event in last 3 months"
-    )
-    thyroid_history = models.BooleanField(
-        null=True, blank=True,
-        help_text="Personal or family history of thyroid issues"
-    )
-    recent_travel_or_illness = models.BooleanField(
-        null=True, blank=True,
-        help_text="Recent travel or viral illness"
-    )
-    sudden_weight_change = models.BooleanField(
-        null=True, blank=True,
-        help_text="Sudden significant weight change (< 3 months)"
-    )
+    # =========================================================
+    # 7️⃣ RED FLAGS
+    # =========================================================
+    heavy_bleeding = models.BooleanField(null=True, blank=True)
+    severe_pelvic_pain = models.BooleanField(null=True, blank=True)
+    possible_pregnancy = models.BooleanField(null=True, blank=True)
+
+    # =========================================================
+    # 8️⃣ OPTIONAL LAB VALUES (Future Predictive Layer)
+    # =========================================================
+    fasting_glucose = models.FloatField(null=True, blank=True)
+    fasting_insulin = models.FloatField(null=True, blank=True)
+    lh_fsh_ratio = models.FloatField(null=True, blank=True)
+    testosterone_level = models.FloatField(null=True, blank=True)
+    amh_level = models.FloatField(null=True, blank=True)
+
+    # =========================================================
+    # META
+    # =========================================================
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"SymptomLog {self.id} - {self.created_at.strftime('%Y-%m-%d')}"
 
 
-class PhenotypeResult(models.Model):
-    """
-    Stores PCOS phenotype classification results.
-    """
-    symptom_log = models.OneToOneField(
-        SymptomLog,
-        on_delete=models.CASCADE,
-        related_name='result'
-    )
-    phenotype = models.CharField(
-        max_length=100,
-        help_text="Classified PCOS phenotype"
-    )
-    confidence = models.FloatField(
-        help_text="Confidence score (0-100)"
-    )
-    reasons = models.JSONField(
-        help_text="List of contributing factors"
-    )
-    data_quality_score = models.IntegerField(
-        default=100,
-        help_text="Data completion/quality score (0-100)"
-    )
-    rule_version = models.CharField(
-        max_length=20,
-        default="1.0.0",
-        help_text="Version of logic rules used"
-    )
-    differential_diagnosis = models.CharField(
-        max_length=200,
-        blank=True, null=True,
-        help_text="Alternative diagnosis if PCOS is unlikely"
-    )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="Timestamp when classification was performed"
-    )
 
-    class Meta:
-        ordering = ['-created_at']
+# ============================================================
+# ADD THESE TWO FIELDS to your PhenotypeResult model
+# ============================================================
+#
+# Find your PhenotypeResult class in models.py and add:
+#
+#     ai_explanation = models.TextField(blank=True, null=True)
+#     diet_plan      = models.TextField(blank=True, null=True)
+#
+# Full model should look like this:
+# ============================================================
+
+from django.db import models
+
+
+class PhenotypeResult(models.Model):
+    symptom_log         = models.OneToOneField(
+                            "SymptomLog",
+                            on_delete=models.CASCADE,
+                            related_name="result"
+                          )
+    phenotype           = models.CharField(max_length=255)
+    confidence          = models.FloatField(default=0)
+    reasons             = models.JSONField(default=list, blank=True)
+    data_quality_score  = models.IntegerField(null=True, blank=True)
+    rule_version        = models.CharField(max_length=50, blank=True, null=True)
+    differential_diagnosis = models.TextField(blank=True, null=True)
+
+    # ✅ NEW FIELDS — add these two lines
+    ai_explanation      = models.TextField(blank=True, null=True)
+    diet_plan           = models.TextField(blank=True, null=True)
+
+    created_at          = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.phenotype} ({self.confidence}%)"
 
 
 # ============================================================
 # NEW MODELS FOR FULL HEALTH COMPANION (Phase 2 Expansion)
 # ============================================================
 
+from django.contrib.auth.models import User
+
 class UserProfile(models.Model):
-    """
-    User profile for multi-user support and personalized tracking.
-    """
-    user_id = models.CharField(
-        max_length=100,
-        unique=True,
-        primary_key=True,
-        help_text="Unique user identifier"
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="profile"
     )
-    name = models.CharField(
-        max_length=200,
-        help_text="User's name"
-    )
-    age = models.IntegerField(
-        null=True,
-        blank=True,
-        help_text="User's age"
-    )
-    height_cm = models.FloatField(
-        null=True,
-        blank=True,
-        help_text="Height in centimeters"
-    )
+
+    name = models.CharField(max_length=200)
+    age = models.IntegerField(null=True, blank=True)
+    height_cm = models.FloatField(null=True, blank=True)
+    preferences = models.JSONField(default=dict, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    preferences = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text="User preferences: notifications, theme, etc."
-    )
-    last_phenotype = models.CharField(
-        max_length=100,
-        null=True,
-        blank=True,
-        help_text="Last PCOS phenotype assessment result"
-    )
 
     def __str__(self):
-        return f"{self.name} ({self.user_id})"
+        return self.user.username
 
-    class Meta:
-        ordering = ['-created_at']
 
 
 class CycleRecord(models.Model):
@@ -408,3 +333,31 @@ class KnowledgeArticle(models.Model):
 
     class Meta:
         ordering = ['-publish_date']
+
+
+class CycleInsight(models.Model):
+    user = models.ForeignKey(UserProfile, on_delete=models.CASCADE)
+    phase = models.CharField(max_length=50)
+    cycle_day = models.IntegerField(null=True)
+    risk_score = models.IntegerField()
+    main_reason = models.TextField()
+    recommendations = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.contrib.auth.models import User
+
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.objects.create(user=instance, name=instance.username)
+
+
+@receiver(post_save, sender=User)
+def save_user_profile(sender, instance, **kwargs):
+    if hasattr(instance, "profile"):
+        instance.profile.save()

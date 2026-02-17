@@ -1,126 +1,148 @@
-import { useState, useEffect } from 'react';
-import { listCycles, predictCycle, logCycle } from '../api';
-import './PeriodCalendar.css';
+import { useState, useEffect } from "react";
+import { listCycles, predictCycle, logCycle } from "../api";
+import "./PeriodCalendar.css";
 
 export default function PeriodCalendar() {
     const [cycles, setCycles] = useState([]);
     const [prediction, setPrediction] = useState(null);
     const [showForm, setShowForm] = useState(false);
     const [loading, setLoading] = useState(true);
-    const userId = 'demo_user';
+    const [error, setError] = useState("");
 
     useEffect(() => {
         loadData();
     }, []);
 
     const loadData = async () => {
+        setLoading(true);
+        setError("");
+
         try {
             const [cycleData, predData] = await Promise.allSettled([
-                listCycles(userId, 12),
-                predictCycle(userId)
+                listCycles(12),
+                predictCycle()
             ]);
-            if (cycleData.status === 'fulfilled') setCycles(cycleData.value);
-            if (predData.status === 'fulfilled') setPrediction(predData.value);
+
+            if (cycleData.status === "fulfilled") {
+                setCycles(cycleData.value);
+            }
+
+            if (predData.status === "fulfilled") {
+                setPrediction(predData.value);
+            }
         } catch (e) {
-            console.error('Error:', e);
+            console.error("Load error:", e);
+            setError("Failed to load data.");
         }
+
         setLoading(false);
     };
 
     const handleLog = async (e) => {
         e.preventDefault();
         const fd = new FormData(e.target);
+
         try {
             await logCycle({
-                user: userId,
-                start_date: fd.get('start_date'),
-                flow_intensity: parseInt(fd.get('flow_intensity')),
-                symptoms: fd.get('symptoms')?.split(',').map(s => s.trim()).filter(Boolean) || [],
-                notes: fd.get('notes') || ''
+                start_date: fd.get("start_date"),
+                end_date: fd.get("end_date") || null,
+                flow_intensity: parseInt(fd.get("flow_intensity") || 3),
+                symptoms:
+                    fd
+                        .get("symptoms")
+                        ?.split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean) || [],
+                notes: fd.get("notes") || ""
             });
+
             setShowForm(false);
             loadData();
         } catch (e) {
-            console.error('Error logging:', e);
+            console.error("Error logging:", e);
+            setError("Failed to log period. Are you logged in?");
         }
     };
 
     return (
         <div className="page-container fade-in">
-            <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+
+            {/* Header */}
+            <div
+                className="page-header"
+                style={{ display: "flex", justifyContent: "space-between" }}
+            >
                 <div>
                     <h1>Period Tracker</h1>
-                    <p>Track your menstrual cycles and get predictions</p>
+                    <p>Track your cycles for smarter PCOS insights</p>
                 </div>
+
                 <button className="btn btn-pink" onClick={() => setShowForm(true)}>
                     + Log Period
                 </button>
             </div>
 
+            {/* Error */}
+            {error && (
+                <div className="card" style={{ background: "#ffe5e5", marginBottom: "16px" }}>
+                    {error}
+                </div>
+            )}
+
             {/* Prediction */}
             {prediction?.next_period_date && (
                 <div className="card prediction-card">
-                    <div className="prediction-content">
-                        <div className="prediction-left">
-                            <span className="prediction-label">Next period expected</span>
-                            <span className="prediction-date">
-                                {new Date(prediction.next_period_date).toLocaleDateString('en-US', {
-                                    month: 'long', day: 'numeric', year: 'numeric'
-                                })}
-                            </span>
-                            <div className="prediction-meta">
-                                <span>In {prediction.days_until} days</span>
-                                <span>•</span>
-                                <span>Avg cycle: {prediction.average_cycle_length} days</span>
-                            </div>
-                        </div>
-                        <div className="prediction-confidence">
-                            <span className="conf-value">{prediction.confidence}%</span>
-                            <span className="conf-label">Confidence</span>
-                        </div>
-                    </div>
+                    <h3>Next Period Expected</h3>
+                    <p>
+                        {new Date(prediction.next_period_date).toLocaleDateString()}
+                    </p>
+                    <p>
+                        Avg cycle: {prediction.average_cycle_length} days
+                        {prediction.confidence && (
+                            <> • Confidence: {prediction.confidence}%</>
+                        )}
+                    </p>
                 </div>
             )}
 
             {/* Cycle History */}
             <h2 className="section-title">Cycle History</h2>
+
             {loading ? (
-                <div className="empty-state"><div className="spinner" style={{ margin: '0 auto' }}></div></div>
+                <p>Loading...</p>
             ) : cycles.length === 0 ? (
                 <div className="empty-state">
-                    <div className="empty-state-icon">📅</div>
-                    <h3>No periods logged yet</h3>
-                    <p>Start tracking by clicking "Log Period"</p>
+                    <p>No periods logged yet.</p>
                 </div>
             ) : (
                 <div className="cycles-list">
-                    {cycles.map(cycle => (
+                    {cycles.map((cycle) => (
                         <div key={cycle.id} className="card cycle-item">
+
                             <div className="cycle-top">
-                                <span className="cycle-date">
-                                    {new Date(cycle.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                </span>
+                                <b>
+                                    {new Date(cycle.start_date).toLocaleDateString()}
+                                </b>
+
                                 {cycle.cycle_length && (
-                                    <span className="badge badge-pink">{cycle.cycle_length} days</span>
+                                    <span className="badge badge-pink">
+                                        {cycle.cycle_length} days
+                                    </span>
                                 )}
                             </div>
+
                             <div className="cycle-details">
-                                <div className="flow-bar">
-                                    <span className="flow-label">Flow</span>
-                                    <div className="flow-dots">
-                                        {[1, 2, 3, 4, 5].map(i => (
-                                            <div key={i} className={`flow-dot ${i <= (cycle.flow_intensity || 0) ? 'active' : ''}`} />
-                                        ))}
-                                    </div>
-                                </div>
+                                <p>Flow: {cycle.flow_intensity || "—"}</p>
+
                                 {cycle.symptoms?.length > 0 && (
-                                    <div className="cycle-symptoms">
-                                        {cycle.symptoms.map((s, i) => (
-                                            <span key={i} className="symptom-tag">{s}</span>
-                                        ))}
-                                    </div>
+                                    <p>Symptoms: {cycle.symptoms.join(", ")}</p>
+                                )}
+
+                                {cycle.notes && (
+                                    <p>Notes: {cycle.notes}</p>
                                 )}
                             </div>
+
                         </div>
                     ))}
                 </div>
@@ -129,29 +151,71 @@ export default function PeriodCalendar() {
             {/* Log Modal */}
             {showForm && (
                 <div className="modal-overlay" onClick={() => setShowForm(false)}>
-                    <div className="modal card" onClick={e => e.stopPropagation()}>
+                    <div className="modal card" onClick={(e) => e.stopPropagation()}>
                         <h2>Log Period</h2>
+
                         <form onSubmit={handleLog}>
+
                             <div className="field">
                                 <label>Start Date</label>
-                                <input className="input" type="date" name="start_date" required defaultValue={new Date().toISOString().split('T')[0]} />
+                                <input
+                                    className="input"
+                                    type="date"
+                                    name="start_date"
+                                    required
+                                />
                             </div>
+
+                            <div className="field">
+                                <label>End Date</label>
+                                <input className="input" type="date" name="end_date" />
+                            </div>
+
                             <div className="field">
                                 <label>Flow Intensity (1-5)</label>
-                                <input className="input" type="number" name="flow_intensity" min="1" max="5" defaultValue="3" />
+                                <input
+                                    className="input"
+                                    type="number"
+                                    name="flow_intensity"
+                                    min="1"
+                                    max="5"
+                                    defaultValue="3"
+                                />
                             </div>
+
                             <div className="field">
                                 <label>Symptoms (comma-separated)</label>
-                                <input className="input" type="text" name="symptoms" placeholder="cramps, headache, bloating" />
+                                <input
+                                    className="input"
+                                    type="text"
+                                    name="symptoms"
+                                    placeholder="cramps, bloating, headache"
+                                />
                             </div>
+
                             <div className="field">
                                 <label>Notes</label>
-                                <textarea className="input" name="notes" rows="3" placeholder="Optional notes..." />
+                                <textarea
+                                    className="input"
+                                    name="notes"
+                                    rows="3"
+                                />
                             </div>
+
                             <div className="modal-actions">
-                                <button type="button" className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button>
-                                <button type="submit" className="btn btn-pink">Log Period</button>
+                                <button
+                                    type="button"
+                                    className="btn btn-outline"
+                                    onClick={() => setShowForm(false)}
+                                >
+                                    Cancel
+                                </button>
+
+                                <button type="submit" className="btn btn-pink">
+                                    Log Period
+                                </button>
                             </div>
+
                         </form>
                     </div>
                 </div>
