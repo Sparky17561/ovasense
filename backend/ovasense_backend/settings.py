@@ -130,25 +130,29 @@ REST_FRAMEWORK = {
 # 🔥 CORS + SESSION FIXES
 # ===============================
 
-# Read frontend URL from env (e.g., https://ovasense.vercel.app)
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+# Read frontend URL from env (e.g., https://ovasense-one.vercel.app)
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip('/')
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
 
-# Add the production frontend URL if set
 if FRONTEND_URL and FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
     CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
 
 CORS_ALLOW_CREDENTIALS = True
 
+# CSRF settings
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
 ]
 if FRONTEND_URL:
     CSRF_TRUSTED_ORIGINS.append(FRONTEND_URL)
+    # Also add the backend domain itself for safety
+    backend_domain = os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(',')[0]
+    if backend_domain:
+        CSRF_TRUSTED_ORIGINS.append(f"https://{backend_domain}")
 
 # Production cookie settings
 if not DEBUG:
@@ -156,7 +160,10 @@ if not DEBUG:
     CSRF_COOKIE_SAMESITE = "None"
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    # Important for Render's load balancer
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_DOMAIN = None  # Allow cross-domain
 else:
     SESSION_COOKIE_SAMESITE = "Lax"
     CSRF_COOKIE_SAMESITE = "Lax"
