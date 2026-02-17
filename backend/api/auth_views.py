@@ -1,19 +1,18 @@
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login, logout
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.authtoken.models import Token
+from rest_framework.authentication import TokenAuthentication
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from .models import UserProfile
-from django.views.decorators.csrf import ensure_csrf_cookie
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-@ensure_csrf_cookie
-def csrf(request):
-    return JsonResponse({"message": "CSRF cookie set"})
-
 
 # ---------------- REGISTER ----------------
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def register(request):
     username = request.data.get("username")
     password = request.data.get("password")
@@ -30,8 +29,7 @@ def register(request):
     try:
         user = User.objects.create_user(username=username, password=password)
 
-        # ✅ IMPORTANT FIX
-        # ✅ ROBUST PROFILE CREATION
+        # Profile Creation
         try:
             profile_name = name or username
             profile_age = int(age) if age and str(age).isdigit() else None
@@ -45,37 +43,33 @@ def register(request):
                     "height_cm": profile_height
                 }
             )
-            print(f"✅ [REGISTER] Created Profile for {username}: {profile_name}, {profile_age}")
         except Exception as prof_e:
             print(f"⚠️ [REGISTER] Profile creation warning: {prof_e}")
 
-        login(request, user)
-        request.session.save()
+        # Generate Token
+        token, _ = Token.objects.get_or_create(user=user)
 
         return Response({
             "message": "Registered successfully",
+            "token": token.key,
             "username": user.username
         })
 
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
-
-
 # ---------------- LOGIN ----------------
-from rest_framework.authtoken.models import Token
-
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def login_view(request):
     username = request.data.get("username")
     password = request.data.get("password")
 
-    user = authenticate(request, username=username, password=password)
+    user = authenticate(username=username, password=password)
 
     if user is None:
         return Response({"error": "Invalid credentials"}, status=400)
 
-    login(request, user)
     token, _ = Token.objects.get_or_create(user=user)
 
     return Response({
@@ -84,30 +78,26 @@ def login_view(request):
         "username": user.username
     })
 
-
 # ---------------- LOGOUT ----------------
-from django.contrib.auth import logout
-from django.http import JsonResponse
-@csrf_exempt
 @api_view(["POST"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def logout_view(request):
-    logout(request)
-
-    response = JsonResponse({"message": "Logged out"})
-    request.session.flush()
-
-    return response
-
-
+    request.user.auth_token.delete()
+    return Response({"message": "Logged out"})
 
 # ---------------- CHECK SESSION ----------------
 @api_view(["GET"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def me(request):
-    if not request.user.is_authenticated:
-        return Response({"authenticated": False})
+    try:
+        name = request.user.profile.name
+    except:
+        name = request.user.username
 
     return Response({
         "authenticated": True,
         "username": request.user.username,
-        "name": request.user.profile.name
+        "name": name
     })

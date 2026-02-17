@@ -16,7 +16,6 @@ load_dotenv(BASE_DIR / ".env")
 # ===============================
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-secret-key")
 DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() == "true"
-
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",")
 
 # ===============================
@@ -31,7 +30,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
 
     "rest_framework",
-    "rest_framework.authtoken",
+    "rest_framework.authtoken", # 🔥 Fixed cross-domain auth
     "corsheaders",
     "api",
 ]
@@ -40,7 +39,7 @@ INSTALLED_APPS = [
 # MIDDLEWARE
 # ===============================
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",  # 🔥 MUST BE AT TOP
+    "corsheaders.middleware.CorsMiddleware",  # 🔥 Must be at top
     "api.middleware.DisableCSRFMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -82,16 +81,6 @@ DATABASES = {
 }
 
 # ===============================
-# AUTH PASSWORD VALIDATION
-# ===============================
-AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
-]
-
-# ===============================
 # I18N
 # ===============================
 LANGUAGE_CODE = "en-us"
@@ -113,8 +102,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # ===============================
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
-        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework.authentication.TokenAuthentication", # No cookies needed
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
@@ -122,46 +110,22 @@ REST_FRAMEWORK = {
 }
 
 # ===============================
-# 🔥 CORS + SESSION FIXES
+# 🔥 CORS CONFIG
 # ===============================
-
-# Read frontend URL from env (e.g., https://ovasense-one.vercel.app)
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip('/')
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
-
 if FRONTEND_URL and FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
     CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
 
 CORS_ALLOW_CREDENTIALS = True
 
-# CSRF settings
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:3000",
-]
+# CSRF settings (Disabled for API via middleware, but kept for Admin)
+CSRF_TRUSTED_ORIGINS = ["http://localhost:3000"]
 if FRONTEND_URL:
     CSRF_TRUSTED_ORIGINS.append(FRONTEND_URL)
-    # Also add the backend domain itself for safety
-    backend_domain = os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(',')[0]
-    if backend_domain:
-        CSRF_TRUSTED_ORIGINS.append(f"https://{backend_domain}")
 
-# Production cookie settings
-if not DEBUG:
-    SESSION_COOKIE_SAMESITE = "None"
-    CSRF_COOKIE_SAMESITE = "None"
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    # Important for Render/Vercel
-    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    SESSION_COOKIE_HTTPONLY = True
-    SESSION_SAVE_EVERY_REQUEST = True
-    SESSION_COOKIE_AGE = 1209600 # 2 weeks
-else:
-    SESSION_COOKIE_SAMESITE = "Lax"
-    CSRF_COOKIE_SAMESITE = "Lax"
-    SESSION_COOKIE_SECURE = False
-    CSRF_COOKIE_SECURE = False
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
