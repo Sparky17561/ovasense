@@ -146,7 +146,7 @@ Symptoms:
 
 Return ONLY JSON:
 {{
- "future_risk_score": number,
+ "future_risk_score": integer (0-100),
  "mixed_pcos_types": ["type"],
  "recommended_lab_tests": ["test"],
  "priority_lifestyle_changes": ["action"],
@@ -161,7 +161,17 @@ Return ONLY JSON:
             max_tokens=400,
         )
 
-        return safe_json_parse(chat.choices[0].message.content)
+        result = safe_json_parse(chat.choices[0].message.content)
+        if result and "future_risk_score" in result:
+            try:
+                # Handle 0-1 range by converting to percentage
+                val = float(result["future_risk_score"])
+                if 0 < val <= 1:
+                    val *= 100
+                result["future_risk_score"] = int(val)
+            except:
+                result["future_risk_score"] = 0
+        return result
 
     except Exception as e:
         print("⚠️ Predictive LMM failed:", e)

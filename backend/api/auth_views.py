@@ -31,14 +31,23 @@ def register(request):
         user = User.objects.create_user(username=username, password=password)
 
         # ✅ IMPORTANT FIX
-        UserProfile.objects.get_or_create(
-            user=user,
-            defaults={
-                "name": name or username,
-                "age": int(age) if age else None,
-                "height_cm": float(height_cm) if height_cm else None
-            }
-        )
+        # ✅ ROBUST PROFILE CREATION
+        try:
+            profile_name = name or username
+            profile_age = int(age) if age and str(age).isdigit() else None
+            profile_height = float(height_cm) if height_cm and str(height_cm).replace('.', '', 1).isdigit() else None
+
+            UserProfile.objects.update_or_create(
+                user=user,
+                defaults={
+                    "name": profile_name,
+                    "age": profile_age,
+                    "height_cm": profile_height
+                }
+            )
+            print(f"✅ [REGISTER] Created Profile for {username}: {profile_name}, {profile_age}")
+        except Exception as prof_e:
+            print(f"⚠️ [REGISTER] Profile creation warning: {prof_e}")
 
         login(request, user)
         request.session.save()

@@ -12,7 +12,9 @@ from .serializers import (
 from .ml_engine import classify_phenotype
 from .report import generate_pdf_report
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
+from datetime import date
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -144,6 +146,7 @@ def classify_symptoms(request):
     # ── 1. VALIDATE + SAVE SYMPTOMS ──────────────────────────────
     serializer = SymptomLogSerializer(data=request.data)
     if not serializer.is_valid():
+        print(f"❌ [DEBUG] Serializer Errors: {serializer.errors}")
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     symptom_log = serializer.save()
 
@@ -240,6 +243,10 @@ Give personalized diet advice.
         "differential_diagnosis": classification["differential_diagnosis"],
         "ai_explanation":       ai_explanation,   # ✅ NOW SAVED
         "diet_plan":            diet_plan,         # ✅ NOW SAVED
+        "future_risk_score":        classification["future_risk_score"],
+        "mixed_pcos_types":         classification["mixed_pcos_types"],
+        "recommended_lab_tests":    classification["recommended_lab_tests"],
+        "priority_lifestyle_changes": classification["priority_lifestyle_changes"],
     }
 
     result_serializer = PhenotypeResultSerializer(data=result_data)
@@ -390,17 +397,125 @@ def process_text(request):
         if not user_text:
             return Response({'error': 'No text provided'}, status=status.HTTP_400_BAD_REQUEST)
 
-        result = get_baymax_response(user_text, conversation_history, current_data)
+        # ── CONTEXTUAL DATA FETCHING ────────────────────────────────
+        # ── CONTEXTUAL DATA FETCHING ────────────────────────────────
+        user_context_str = ""
+        try:
+            print(f"👤 [DEBUG] Request User: {request.user}, Is Authenticated: {request.user.is_authenticated}")
+            if request.user.is_authenticated and hasattr(request.user, 'profile'):
+                profile = request.user.profile
+                user_context_str += f"User Name: {profile.name}. Age: {profile.age}. "
+                if profile.height_cm:
+                    user_context_str += f"Height: {profile.height_cm}cm. "
+                if profile.preferences:
+                    user_context_str += f"Preferences: {profile.preferences}. "
+                
+                print(f"✅ [DEBUG] Found Profile: {profile.name}")
+                
+                # Get latest cycle info
+                from .models import CycleRecord
+                latest_cycle = CycleRecord.objects.filter(user=profile).order_by('-start_date').first()
+                if latest_cycle:
+                    days_since = (date.today() - latest_cycle.start_date).days
+                    user_context_str += f"Last Period: {latest_cycle.start_date} ({days_since} days ago). "
+                    if latest_cycle.symptoms:
+                        user_context_str += f"Recent Symptoms: {latest_cycle.symptoms}. "
+                else:
+                    user_context_str += "No cycle history logged yet. "
+                    
+                # Get latest Phenotype Analysis (for Diet/Risk context)
+                from .models import SymptomLog
+                latest_log = SymptomLog.objects.filter(user=profile).order_by('-created_at').first()
+                if latest_log:
+                     if latest_log.bmi:
+                         user_context_str += f"BMI: {latest_log.bmi}. "
+                     if latest_log.periods_regular is not None:
+                         reg_status = "Regular" if latest_log.periods_regular else "Irregular"
+                         user_context_str += f"Cycles are {reg_status}. "
+
+                if latest_log and hasattr(latest_log, 'result'):
+                    res = latest_log.result
+                    user_context_str += f"\nPCOS Type: {res.phenotype}. Risk Score: {res.future_risk_score}%. "
+                    user_context_str += f"\nKey Factors: {', '.join(res.reasons)}. "
+                    if res.ai_explanation:
+                        user_context_str += f"\nClinical Insight: {res.ai_explanation}. "
+                    if res.diet_plan:
+                        user_context_str += f"\nRecommended Nutrition: {res.diet_plan}. "
+            else:
+                print("⚠️ [DEBUG] User not authenticated or no profile found")
+                
+        except Exception as ctx_err:
+            print(f"❌ [DEBUG] Context fetch error: {ctx_err}")
+
+        print(f"📋 [DEBUG] CONTEXT SENT TO AGENT:\n{user_context_str}")
+
+        # ── CHAT HISTORY MANAGEMENT ────────────────────────────────
+        from .models import ChatSession
+        
+        # Load recent history from DB if authenticated
+        db_history = []
+        if request.user.is_authenticated and hasattr(request.user, 'profile'):
+            sessions = ChatSession.objects.filter(user=request.user.profile).order_by('created_at').last()
+            # Get last 10 messages
+            recent_chats = ChatSession.objects.filter(user=request.user.profile).order_by('-created_at')[:10]
+            # Reverse to chronological order
+            for chat in reversed(recent_chats):
+                db_history.append({'sender': chat.sender, 'text': chat.message})
+        
+        # Combine with client-sent history (if any, though usually client sends empty for new session)
+        full_history = db_history + conversation_history
+
+        result = get_baymax_response(user_text, full_history, current_data, user_context=user_context_str)
+        
+        extracted_data = result.get('extracted_data', {})
+        
+        # Save new interaction to DB
+        if request.user.is_authenticated and hasattr(request.user, 'profile'):
+            try:
+                ChatSession.objects.create(user=request.user.profile, sender='user', message=user_text)
+                ChatSession.objects.create(user=request.user.profile, sender='assistant', message=result['response_text'])
+            except Exception as e:
+                print(f"Failed to save chat history: {e}")
+        
+        # ── AUTO-LOGGING LOGIC ──────────────────────────────────────
+        # If we detected a period start, log it automatically
+        if extracted_data.get('period_action') == 'start':
+            from .models import CycleRecord
+            from datetime import date, timedelta
+            
+            # Simple date parsing (default to today)
+            start_date = date.today()
+            if extracted_data.get('period_date') == 'yesterday':
+                start_date = date.today() - timedelta(days=1)
+                
+            # Check if we already have a record for this timeframe to prevent duplicates
+            if not CycleRecord.objects.filter(
+                user=request.user.userprofile if hasattr(request.user, 'userprofile') else None, 
+                start_date=start_date
+            ).exists():
+                # For demo, assumes first user if request.user isn't fully set up with token auth yet
+                # ideally: request.user.userprofile
+                pass 
+                # TODO: Link to actual logged-in user. For now, we'll just skip saving if no user.
+                
+                # If you have a way to get the default user (e.g. for single user app)
+                # from .models import UserProfile
+                # default_profile = UserProfile.objects.first()
+                # CycleRecord.objects.create(user=default_profile, start_date=start_date)
+                
+                # print(f"✅ Auto-logged period for {start_date}")
 
         return Response({
             'response_text':          result['response_text'],
-            'extracted_data':         result.get('extracted_data'),
-            'ready_for_classification': result.get('ready_for_classification', False),
-            'missing_fields':         result.get('missing_fields', [])
+            'extracted_data':         extracted_data,
+            'ready_for_classification': False,
+            'missing_fields':         []
         })
 
     except Exception as e:
         print(f"Error in text chat: {e}")
+        import traceback
+        traceback.print_exc()
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 

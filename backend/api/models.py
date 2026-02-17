@@ -15,6 +15,17 @@ class SymptomLog(models.Model):
     """
 
     # =========================================================
+    # 0️⃣ USER LINK
+    # =========================================================
+    user = models.ForeignKey(
+        "UserProfile", 
+        on_delete=models.CASCADE, 
+        related_name="symptom_logs",
+        null=True, # Temporarily nullable for migration
+        blank=True
+    )
+
+    # =========================================================
     # 1️⃣ MENSTRUAL CYCLE
     # =========================================================
     cycle_gap_days = models.IntegerField(help_text="Days between menstrual cycles")
@@ -138,6 +149,12 @@ class PhenotypeResult(models.Model):
     # ✅ NEW FIELDS — add these two lines
     ai_explanation      = models.TextField(blank=True, null=True)
     diet_plan           = models.TextField(blank=True, null=True)
+
+    # ✅ NEW FIELDS for Future Risk & Recommendations
+    future_risk_score          = models.IntegerField(null=True, blank=True)
+    mixed_pcos_types           = models.JSONField(default=list, blank=True)
+    recommended_lab_tests      = models.JSONField(default=list, blank=True)
+    priority_lifestyle_changes = models.JSONField(default=list, blank=True)
 
     created_at          = models.DateTimeField(auto_now_add=True)
 
@@ -361,3 +378,28 @@ def create_user_profile(sender, instance, created, **kwargs):
 def save_user_profile(sender, instance, **kwargs):
     if hasattr(instance, "profile"):
         instance.profile.save()
+
+
+class ChatSession(models.Model):
+    """
+    Stores persistent chat history for Baymax interactions.
+    """
+    SENDER_CHOICES = [
+        ('user', 'User'),
+        ('assistant', 'Baymax'),
+    ]
+
+    user = models.ForeignKey(
+        UserProfile,
+        on_delete=models.CASCADE,
+        related_name='chat_history'
+    )
+    sender = models.CharField(max_length=20, choices=SENDER_CHOICES)
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.user.name} - {self.sender} - {self.created_at}"

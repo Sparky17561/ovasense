@@ -10,8 +10,6 @@ urlpatterns = [
     path('history/', views.get_history, name='get_history'),
     path('text/', views.process_text, name='process_text'),
     path('chat/', views.process_text, name='process_text_chat'),
-
-
     
     # Period Tracking
     path('cycle/log/', health_views.log_cycle, name='log_cycle'),

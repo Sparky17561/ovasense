@@ -1,18 +1,12 @@
 """
 Voice processing module for Baymax AI assistant.
-Uses Groq API, Whisper (CPU), and Kokoro TTS for fast server-side voice processing.
+Uses Groq API for text processing. Audio handling is offloaded to the frontend.
 """
 
 import os
-import tempfile
-import numpy as np
-from faster_whisper import WhisperModel
-from kokoro import KPipeline
-
-# Disable GPU to avoid cuDNN issues
-os.environ["CT2_USE_ONNX"] = "0"
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
-os.environ["ORT_DISABLE_GPU"] = "1"
+import json
+import re
+from datetime import datetime
 
 # Load settings from environment
 from dotenv import load_dotenv
@@ -20,14 +14,9 @@ load_dotenv()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")
-KOKORO_VOICE = os.getenv("KOKORO_VOICE", "af_bella")
-KOKORO_SR = 24000
 
 # Lazy-loaded globals
-_whisper = None
 _groq_client = None
-_kokoro = None
 _baymax_prompt = None
 
 
@@ -37,32 +26,31 @@ def load_system_prompt():
     if _baymax_prompt:
         return _baymax_prompt
     
-    try:
-        prompt_path = os.path.join(os.path.dirname(__file__), '..', 'prompt.txt')
-        with open(prompt_path, "r", encoding="utf-8") as f:
-            _baymax_prompt = f.read().strip()
-            print("✔ Loaded Baymax persona from prompt.txt")
-    except Exception as e:
-        print(f"⚠ Error loading prompt.txt: {e}")
-        _baymax_prompt = "You are Baymax, a gentle medical logging assistant for PCOS symptom tracking."
-    
+    _baymax_prompt = """You are Baymax, a compassionate and motivational mental health companion for OvaSense.
+Your purpose is to provide emotional support, validate feelings, and gently encourage the user in their wellness journey.
+
+CORE PERSONALITY:
+- **Warm & Empathetic**: Use kind, soothing language. ("I am here for you.", "It is okay to feel this way.")
+- **Motivational**: Offer gentle encouragement for small wins. ("You are doing your best, and that is enough.")
+- **Human-Centric**: Speak naturally. NEVER use robotic phrases like "functioning within normal parameters" or "backend systems."
+- **concise**: Keep spoken responses short (1-3 sentences) usually. BUT if asked for a diet plan/recipe, you may provide a structured list.
+
+SCENARIOS:
+1. **Mental Health**: If user says they are stressed/anxious, prioritize validation. "I hear you, and it's okay. You are handling so much."
+2. **Period/PCOS**: Acknowledge symptoms with sympathy. "I'm sorry you're in pain. Your body is doing its best, and I've made a note of it."
+3. **Diet Requests**: Provide a DETAILED **Indian-Context** diet plan based on their PCOS type. 
+   - Suggest: Roti types (Jowar/Bajra vs Wheat), Dal, Sabzi, Curd, Chaas.
+   - Avoid: High-sugar mithai, white rice (if insulin resistant), fried snacks.
+   - Frame it POSITIVELY (`"Try Bajra Roti for better gut health"` instead of `"Don't eat wheat"`).
+4. **General Chat**: Be a cheerleader! "I am proud of you for checking in today."
+
+STRICTLY FORBIDDEN:
+- Technical jargon (servers, backend, databases, parameters).
+- Western-only food suggestions (avocado toast, kale smoothies) unless asked.
+- Negative or judgmental language.
+- Acting like a rigid computer program.
+"""
     return _baymax_prompt
-
-
-def load_whisper():
-    """Lazy-load Whisper model (CPU)"""
-    global _whisper
-    if _whisper:
-        return _whisper
-    
-    print("🧠 Loading Whisper (CPU)...")
-    _whisper = WhisperModel(
-        WHISPER_MODEL,
-        device="cpu",
-        compute_type="float32"
-    )
-    print("✔ Whisper loaded")
-    return _whisper
 
 
 def load_groq():
@@ -74,389 +62,112 @@ def load_groq():
     if not GROQ_API_KEY:
         raise ValueError("GROQ_API_KEY not set in .env file")
     
-    print("🔗 Connecting to Groq...")
     from groq import Groq
     _groq_client = Groq(api_key=GROQ_API_KEY)
-    print("✔ Groq connected")
     return _groq_client
-
-
-def load_kokoro():
-    """Lazy-load Kokoro TTS"""
-    global _kokoro
-    if _kokoro:
-        return _kokoro
-    
-    print("🔊 Loading Kokoro TTS (CPU)...")
-    _kokoro = KPipeline(lang_code="a")
-    print("✔ Kokoro loaded")
-    return _kokoro
-
-
-def transcribe_audio(audio_file_path):
-    """
-    Transcribe audio file using Whisper.
-    
-    Args:
-        audio_file_path: Path to audio file (any format supported by ffmpeg)
-        
-    Returns:
-        str: Transcribed text
-    """
-    whisper = load_whisper()
-    
-    print(f"🧠 Transcribing audio from {audio_file_path}...")
-    
-    segments, info = whisper.transcribe(audio_file_path)
-    text = "".join([seg.text for seg in segments]).strip()
-    
-    print(f"📝 Transcript: {text}")
-    return text
 
 
 def extract_symptom_data(conversation_history):
     """
-    Extract symptom data from the entire conversation using Groq.
-    Returns partial or complete data.
+    Extract structured data (symptoms, period logs, diet requests) from conversation.
     """
     groq_client = load_groq()
     
-    # Build conversation text
     conv_text = "\n".join([
         f"{'User' if msg.get('sender') == 'user' else 'Baymax'}: {msg.get('text', '')}"
         for msg in conversation_history
     ])
     
-    extraction_prompt = f"""You are a data extraction AI. Extract PCOS symptom data from this conversation.
+    extraction_prompt = f"""You are a data extraction AI. Extract health data from this conversation.
 
-Required fields (extract only if mentioned, including negatives):
-1. cycle_gap_days (int): Days since last period
-2. periods_regular (bool): Are periods irregular/unpredictable? (true=regular, false=irregular)
-3. longest_cycle_gap_last_year (int): Longest gap in days between periods in last year
-4. acne (bool): Has acne/skin issues (true if present, false if explicitly denied)
-5. hair_loss (bool): Hair thinning or loss from scalp
-6. facial_hair_growth (bool): Excessive facial/body hair (hirsutism)
-7. bmi (float): Calculate from height/weight if given
-8. waist_cm (int): Waist circumference in cm (Auto-convert inches: x * 2.54)
-9. family_diabetes_history (bool): Parents/siblings with diabetes
-10. sugar_cravings (bool): Cravings for sweets/sugar
-11. weight_gain (bool): Unexplained weight gain
-12. fatigue_after_meals (bool): Tiredness after eating
-13. mood_swings (bool): Anxiety, depression, mood swings
-14. dark_patches (bool): Dark skin patches
-15. stress_level (int): 1-10
-16. sleep_hours (float): Hours/night
-17. heavy_bleeding (bool): Soaking through pads quickly / clots > quarter size
-18. severe_pelvic_pain (bool): Debilitating pain
-19. possible_pregnancy (bool): Could be pregnant?
-20. pill_usage (bool): Recent birth control pill usage
-21. cycle_irregularity_duration_months (int): How long irregular cycles have persisted
-22. acne_duration_months (int): How long acne has persisted
-23. weight_gain_duration_months (int): How long weight gain has persisted
-24. recent_major_stress_event (bool): Major stress in last 3 months
-25. thyroid_history (bool): Diagnosed thyroid issues
-26. recent_travel_or_illness (bool): Travel or illness in last 3 months
-27. sudden_weight_change (bool): Rapid weight change < 3 months
+REQUIRED FIELDS:
+1. **period_action** (str|null): "start" (if period started), "end", "spotting", or null.
+2. **period_date** (str|null): "today", "yesterday", "YYYY-MM-DD", or null.
+3. **diet_request** (bool): Did user ask for specific food advice?
+4. **mental_state** (str|null): "stressed", "anxious", "sad", "happy", etc.
+5. **symptoms** (dict): Any PCOS symptoms mentioned (acne, pain, weight_gain, etc.) as key:value.
 
 Conversation:
 {conv_text}
 
-CRITICAL: Output ONLY a single line of valid JSON. NO comments, NO explanations, NO notes.
-If a field is NOT mentioned at all (neither yes nor no), return null.
-Format: {{"cycle_gap_days": <int or null>, "acne": <true/false/null>, "bmi": <float or null>, "stress_level": <int or null>, "sleep_hours": <float or null>, "sugar_cravings": <bool>, "weight_gain": <bool>, "hair_loss": <bool>, "dark_patches": <bool>, "mood_swings": <bool>, "pill_usage": <bool>, "waist_cm": <int>, "thyroid_history": <bool>, "recent_major_stress_event": <bool>}}"""
+Output valid JSON only.
+Format: {{"period_action": "start", "period_date": "today", "diet_request": false, "mental_state": "anxious", "symptoms": {{}}}}
+"""
 
     try:
         completion = groq_client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[{"role": "user", "content": extraction_prompt}],
-            temperature=0.3,
-            max_tokens=200
+            temperature=0.1,
+            max_tokens=256
         )
         
         response_text = completion.choices[0].message.content.strip()
         print(f"🔍 Extraction response: {response_text}")
         
-        # Extract and clean JSON
-        import json
-        import re
-        
-        # Find JSON block
-        json_match = re.search(r'\{[^}]+\}', response_text, re.DOTALL)
+        # Clean and parse JSON
+        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if json_match:
-            json_str = json_match.group()
-            
-            # Remove comments (both // and /* */ style)
-            json_str = re.sub(r'//.*?$', '', json_str, flags=re.MULTILINE)  # Remove // comments
-            json_str = re.sub(r'/\*.*?\*/', '', json_str, flags=re.DOTALL)  # Remove /* */ comments
-            
-            # Parse cleaned JSON
-            extracted = json.loads(json_str)
-            print(f"✅ Extracted data: {extracted}")
-            return extracted
-        
+            return json.loads(json_match.group())
         return {}
     except Exception as e:
         print(f"⚠️ Extraction error: {e}")
         return {}
 
 
-
-def get_baymax_response(user_text, conversation_history=None, current_data=None):
+def get_baymax_response(user_text, conversation_history=None, current_data=None, user_context=None):
     """
-    Get Baymax response using Groq SDK.
-    Never asks duplicate questions - checks what data is already collected.
-    
-    Args:
-        user_text: User's input text
-        conversation_history: Optional list of previous messages
-        current_data: Dict of already collected data fields
-        
-    Returns:
-        dict: {
-            'response_text': str,
-            'extracted_data': dict (partial or complete),
-            'ready_for_classification': bool
-        }
+    Get Baymax response using Groq.
     """
     groq_client = load_groq()
     system_prompt = load_system_prompt()
     
-    # Determine what's missing with exact values
-    current_data = current_data or {}
+    # Inject user context if available
+    if user_context:
+        system_prompt += f"\n\nUSER CONTEXT:\n{user_context}\nUse this information to personalize your response (e.g. use their name, refer to their cycle). "
+
+    # Build messages
+    messages = [{"role": "system", "content": system_prompt}]
     
-    # Format current status clearly - treat None as MISSING
-    # We must track ALL fields strictly
-    all_fields = [
-        'cycle_gap_days', 'periods_regular', 'longest_cycle_gap_last_year',
-        'acne', 'hair_loss', 'facial_hair_growth', 'bmi', 'waist_cm',
-        'sugar_cravings', 'weight_gain', 'dark_patches', 'family_diabetes_history',
-        'fatigue_after_meals', 'mood_swings', 'stress_level', 'sleep_hours',
-        'heavy_bleeding', 'severe_pelvic_pain', 'possible_pregnancy', 'pill_usage',
-        'cycle_irregularity_duration_months', 'acne_duration_months', 'weight_gain_duration_months',
-        'recent_major_stress_event', 'thyroid_history', 'recent_travel_or_illness', 'sudden_weight_change'
-    ]
-    
-    data_status = {}
-    for field in all_fields:
-        val = current_data.get(field)
-        data_status[field] = val if val is not None else 'MISSING'
-
-    # ---------------------------------------------------------
-    # UNIT VALIDATION & LOGIC CHECKS
-    # ---------------------------------------------------------
-    waist = current_data.get('waist_cm')
-    if waist is not None:
-        # Detect inches (e.g. 30 inches) -> Convert to cm (76.2)
-        if 20 <= waist <= 50: 
-            # Likely inches
-            print(f"⚠️ Detect inches for waist: {waist}. Asking for clarification.")
-            current_data['waist_cm'] = None # Reset to force re-ask or confirmation
-            data_status['waist_cm'] = 'MISSING' 
-            # We will handle the prompt instruction below
-        elif waist < 20 or waist > 200:
-             # Impossible values
-             current_data['waist_cm'] = None
-             data_status['waist_cm'] = 'MISSING'
-
-    # BMI Logic Guard
-    bmi = current_data.get('bmi')
-    if bmi is not None and (bmi < 10 or bmi > 60):
-        current_data['bmi'] = None
-        data_status['bmi'] = 'MISSING'
-
-    missing_fields = [k for k, v in data_status.items() if v == 'MISSING']
-    collected_fields = [k for k, v in data_status.items() if v != 'MISSING']
-    
-    # Enhanced prompt with EXACT data status
-    context_prompt = system_prompt + f"""
-    
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 STATUS REPORT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ COLLECTED: {collected_fields if collected_fields else "NONE"}
-❌ MISSING (YOU MUST COLLECT THESE): {missing_fields if missing_fields else "ALL DONE"}
-
-⚠️ CRITICAL INSTRUCTION:
-You are in DATA COLLECTION MODE.
-Your ONLY goal is to get values for the MISSING fields above.
-
-1. **Unit Checks**:
-   - If user gives WAIST size < 50, ASK: "Was that in inches or centimeters?"
-   - If BMI looks wrong (<15 or >50), ASK to confirm height and weight.
-
-2. **Duration & History**:
-   - If they report irregular cycles, ASK: "How long has this been happening?" (duration_months).
-   - If they report weight gain, ASK: "Did this happen suddenly (less than 3 months)?" (sudden_weight_change).
-   - ASK about **Thyroid history** and **Recent major stress** to rule out other causes.
-
-3. **Priorities**:
-   - 1. Cycle Details (Regularity, Gaps, Duration)
-   - 2. Androgen Signs (Acne, Hair)
-   - 3. Metabolic (Weight, Waist, Family Diabetes)
-   - 4. Differentials (Thyroid, Stress, Travel)
-
-4. **Safety**:
-   - If RED FLAG (heavy bleeding, severe pain) -> STOP and advise doctor.
-
-5. **Completion**:
-   - DO NOT say "analyzing" until ALL fields are collected.
-"""
-    
-    # Build conversation messages
-    messages = [
-        {"role": "system", "content": context_prompt}
-    ]
-    
-    # Add conversation history
     if conversation_history:
-        for msg in conversation_history[-10:]:
+        for msg in conversation_history[-6:]: # Keep context short
             role = "user" if msg.get('sender') == 'user' else "assistant"
             messages.append({"role": role, "content": msg.get('text', '')})
-    
-    # Add current user message
+            
     messages.append({"role": "user", "content": user_text})
     
-    print(f"🤖 Getting Baymax response... (missing: {missing_fields})")
+    print(f"🤖 Getting Baymax response...")
+    print(f"📤 [DEBUG] SENT TO GROQ:\n{json.dumps(messages, indent=2)}")
     
     try:
         completion = groq_client.chat.completions.create(
             model=GROQ_MODEL,
             messages=messages,
             temperature=0.7,
-            max_tokens=512
+            max_tokens=256 # Keep replies concise
         )
         
         response_text = completion.choices[0].message.content.strip()
         print(f"💬 Baymax: {response_text}")
         
-        # Extract data from full conversation
+        # Extract data from just this turn (heuristic for speed)
         full_history = (conversation_history or []) + [
             {'sender': 'user', 'text': user_text},
             {'sender': 'assistant', 'text': response_text}
         ]
+        
         extracted_data = extract_symptom_data(full_history)
-        
-        # Merge with current data
-        merged_data = {**current_data}
-        for key, value in extracted_data.items():
-            if value is not None:
-                merged_data[key] = value
-        
-        # STRICT COMPLETION CHECK
-        # Recalculate missing based on merged_data
-        still_missing = [f for f in all_fields if merged_data.get(f) is None]
-        
-        # Ready only if NOTHING is missing
-        is_complete = len(still_missing) == 0
-        
-        print(f"📊 Merged data: {merged_data}, Complete: {is_complete}")
         
         return {
             'response_text': response_text,
-            'extracted_data': merged_data,
-            'ready_for_classification': is_complete,
-            'missing_fields': still_missing
+            'extracted_data': extracted_data,
+            'ready_for_classification': False, 
+            'missing_fields': []
         }
         
     except Exception as e:
         print(f"Error calling Groq API: {e}")
         return {
-            'response_text': "I apologize, but I'm having trouble processing your request right now.",
-            'extracted_data': current_data,
-            'ready_for_classification': False
-        }
-
-
-def generate_speech(text):
-    """
-    Generate speech audio from text using Kokoro TTS.
-    
-    Args:
-        text: Text to convert to speech
-        
-    Returns:
-        tuple: (audio_array, samplerate)
-    """
-    pipeline = load_kokoro()
-    
-    print("🔊 Generating speech...")
-    audio_chunks = []
-    
-    for _, _, audio in pipeline(text, voice=KOKORO_VOICE):
-        audio_chunks.append(audio)
-    
-    if audio_chunks:
-        audio = np.concatenate(audio_chunks)
-        print(f"✔ Generated {len(audio) / KOKORO_SR:.2f}s of audio")
-        return audio, KOKORO_SR
-    else:
-        # Return silence if generation failed
-        return np.zeros(int(KOKORO_SR * 0.5)), KOKORO_SR
-
-
-def process_voice_input(audio_file_path, conversation_history=None, current_data=None):
-    """
-    Complete voice processing pipeline with intelligent data extraction.
-    
-    Returns:
-        dict: {
-            'transcript': str,
-            'response_text': str,
-            'response_audio': numpy.array,
-            'audio_samplerate': int,
-            'extracted_data': dict (partial or complete),
-            'ready_for_classification': bool
-        }
-    """
-    try:
-        # Step 1: Transcribe
-        transcript = transcribe_audio(audio_file_path)
-        
-        if not transcript.strip():
-            return {
-                'transcript': '',
-                'response_text': 'I did not hear anything. Could you please speak again?',
-                'response_audio': None,
-                'audio_samplerate': KOKORO_SR,
-                'extracted_data': current_data or {},
-                'ready_for_classification': False
-            }
-        
-        # Step 2: Get response with data extraction
-        baymax_result = get_baymax_response(transcript, conversation_history, current_data)
-        response_text = baymax_result['response_text']
-        
-        # Step 3: Generate speech
-        response_audio, audio_sr = generate_speech(response_text)
-        
-        return {
-            'transcript': transcript,
-            'response_text': response_text,
-            'response_audio': response_audio,
-            'audio_samplerate': audio_sr,
-            'extracted_data': baymax_result.get('extracted_data', {}),
-            'ready_for_classification': baymax_result.get('ready_for_classification', False)
-        }
-        
-        return {
-            'transcript': transcript,
-            'response_text': response_text,
-            'response_audio': response_audio,
-            'audio_samplerate': audio_sr,
-            'extracted_data': baymax_result.get('extracted_data'),
-            'ready_for_classification': baymax_result.get('ready_for_classification', False)
-        }
-        
-    except Exception as e:
-        print(f"Error in voice processing: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        return {
-            'transcript': '',
-            'response_text': 'I apologize, but I encountered an error. Please try again.',
-            'response_audio': None,
-            'audio_samplerate': KOKORO_SR,
-            'extracted_data': None,
-            'ready_for_classification': False
+            'response_text': "I am having trouble processing that right now.",
+            'extracted_data': {},
         }

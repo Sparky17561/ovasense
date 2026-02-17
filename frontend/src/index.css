@@ -1,4 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=BBH+Hegarty&family=Carrois+Gothic&family=Fira+Sans+Extra+Condensed:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Lora:ital,wght@0,400..700;1,400..700&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap");
+@import "tailwindcss";
 
 :root {
   --bg: #0a0a0a;
@@ -19,13 +21,13 @@
   --yellow: #eab308;
   --red: #ef4444;
   --radius: 10px;
+  --font-lora: "Lora", serif;
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+@theme {
+  --font-lora: "Lora", serif;
 }
+
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -35,86 +37,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ========== APP LAYOUT ========== */
-.app-layout {
-  display: flex;
-  height: 100vh;
-}
-
-/* ========== SIDEBAR ========== */
-.sidebar {
-  width: 240px;
-  background: var(--bg-sidebar);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-}
-
-.sidebar-logo {
-  padding: 24px 20px;
-  border-bottom: 1px solid var(--border);
-}
-
-.sidebar-logo h1 {
-  font-size: 1.4rem;
-  font-weight: 800;
-  letter-spacing: -0.5px;
-}
-
-.sidebar-logo span {
-  color: var(--pink);
-}
-
-.sidebar-nav {
+/* ========== MAIN CONTENT ========== */
+.main-content {
   flex: 1;
-  padding: 12px 8px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: var(--radius);
-  cursor: pointer;
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  font-weight: 500;
-  text-decoration: none;
-  transition: all 0.15s ease;
-  border: none;
-  background: none;
-  width: 100%;
-  text-align: left;
-}
-
-.nav-item:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.nav-item.active {
-  background: var(--pink-dim);
-  color: var(--pink);
-  font-weight: 600;
-}
-
-.nav-icon {
-  width: 20px;
-  text-align: center;
-  font-size: 1.1rem;
-}
-
-.sidebar-footer {
-  padding: 16px;
-  border-top: 1px solid var(--border);
-  font-size: 0.75rem;
-  color: var(--text-dim);
-  text-align: center;
 }
 
 /* ========== MAIN CONTENT ========== */
@@ -328,4 +256,14 @@ body {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ========== UTILITIES ========== */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

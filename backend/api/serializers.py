@@ -66,6 +66,10 @@ class PhenotypeResultSerializer(serializers.ModelSerializer):
             "differential_diagnosis",
             "ai_explanation",       # ✅ NEW
             "diet_plan",            # ✅ NEW
+            "future_risk_score",
+            "mixed_pcos_types",
+            "recommended_lab_tests",
+            "priority_lifestyle_changes",
             "created_at",
         ]
         read_only_fields = ["id", "created_at"]
