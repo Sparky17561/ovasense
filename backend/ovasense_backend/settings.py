@@ -2,13 +2,22 @@
 Django settings for ovasense_backend project.
 """
 
+import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "dev-secret-key"
-DEBUG = True
-ALLOWED_HOSTS = ["*"]
+# Load .env file from backend root
+load_dotenv(BASE_DIR / ".env")
+
+# ===============================
+# SECURITY
+# ===============================
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-secret-key")
+DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() == "true"
+
+ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",")
 
 # ===============================
 # APPS
@@ -32,6 +41,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "api.middleware.DisableCSRFMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # Serve static files in production
 
     "corsheaders.middleware.CorsMiddleware",
 
@@ -92,7 +102,13 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
+# ===============================
+# STATIC FILES
+# ===============================
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ===============================
@@ -114,16 +130,35 @@ REST_FRAMEWORK = {
 # 🔥 CORS + SESSION FIXES
 # ===============================
 
-CORS_ALLOW_ALL_ORIGINS = True
+# Read frontend URL from env (e.g., https://ovasense.vercel.app)
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+# Add the production frontend URL if set
+if FRONTEND_URL and FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
+
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
 ]
+if FRONTEND_URL:
+    CSRF_TRUSTED_ORIGINS.append(FRONTEND_URL)
 
-SESSION_COOKIE_SAMESITE = "Lax"
-CSRF_COOKIE_SAMESITE = "Lax"
-
-SESSION_COOKIE_SECURE = False
-CSRF_COOKIE_SECURE = False
-
+# Production cookie settings
+if not DEBUG:
+    SESSION_COOKIE_SAMESITE = "None"
+    CSRF_COOKIE_SAMESITE = "None"
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+else:
+    SESSION_COOKIE_SAMESITE = "Lax"
+    CSRF_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False

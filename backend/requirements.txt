@@ -26,3 +26,7 @@ groq>=0.9.0
 
 # Safe numpy for Python 3.13
 numpy>=2.1.0
+
+# Production
+gunicorn==21.2.0
+whitenoise==6.6.0
