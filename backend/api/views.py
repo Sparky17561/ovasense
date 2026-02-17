@@ -478,32 +478,96 @@ def process_text(request):
                 print(f"Failed to save chat history: {e}")
         
         # ── AUTO-LOGGING LOGIC ──────────────────────────────────────
-        # If we detected a period start, log it automatically
-        if extracted_data.get('period_action') == 'start':
+        # 1. Start Date
+        start_date_str = extracted_data.get('period_start_date')
+        if start_date_str:
             from .models import CycleRecord
-            from datetime import date, timedelta
+            from datetime import datetime, timedelta
             
-            # Simple date parsing (default to today)
-            start_date = date.today()
-            if extracted_data.get('period_date') == 'yesterday':
-                start_date = date.today() - timedelta(days=1)
+            try:
+                s_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
                 
-            # Check if we already have a record for this timeframe to prevent duplicates
-            if not CycleRecord.objects.filter(
-                user=request.user.userprofile if hasattr(request.user, 'userprofile') else None, 
-                start_date=start_date
-            ).exists():
-                # For demo, assumes first user if request.user isn't fully set up with token auth yet
-                # ideally: request.user.userprofile
-                pass 
-                # TODO: Link to actual logged-in user. For now, we'll just skip saving if no user.
+                # Check for existing record near this date (within 5 days) to avoid duplicates
+                existing = CycleRecord.objects.filter(
+                    user=request.user.profile,
+                    start_date__gte=s_date - timedelta(days=5),
+                    start_date__lte=s_date + timedelta(days=5)
+                ).first()
                 
-                # If you have a way to get the default user (e.g. for single user app)
-                # from .models import UserProfile
-                # default_profile = UserProfile.objects.first()
-                # CycleRecord.objects.create(user=default_profile, start_date=start_date)
+                if existing:
+                    # Update start date if needed, or just append symptoms
+                    existing.start_date = s_date # Update to precise date if user corrected it
+                    existing.save()
+                    print(f"✅ Updated existing cycle record for {s_date}")
+                else:
+                    CycleRecord.objects.create(user=request.user.profile, start_date=s_date)
+                    print(f"✅ Created new cycle record for {s_date}")
+                    
+            except ValueError:
+                print(f"⚠️ Invalid start date format: {start_date_str}")
+
+        # 2. End Date
+        end_date_str = extracted_data.get('period_end_date')
+        if end_date_str:
+            from .models import CycleRecord
+            from datetime import datetime
+            
+            try:
+                e_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
                 
-                # print(f"✅ Auto-logged period for {start_date}")
+                # Find the most recent open cycle (no end date) or recent cycle
+                latest_cycle = CycleRecord.objects.filter(
+                    user=request.user.profile,
+                    start_date__lte=e_date
+                ).order_by('-start_date').first()
+                
+                if latest_cycle:
+                    latest_cycle.end_date = e_date
+                    latest_cycle.save()
+                    print(f"✅ Logged end date {e_date} for cycle starting {latest_cycle.start_date}")
+                else:
+                    # If no start date found, create one assuming standard length? 
+                    # For now just log end date if we can't find start? 
+                    # Or maybe create a record with start_date = end_date - 5 days?
+                    # Let's just log it if we can find a record.
+                    print(f"⚠️ Could not find start date for end date {e_date}")
+                    
+            except ValueError:
+                print(f"⚠️ Invalid end date format: {end_date_str}")
+
+        # 3. Log Symptoms to latest active cycle
+        new_symptoms = extracted_data.get('symptoms', {})
+        if new_symptoms:
+            from .models import CycleRecord
+            from datetime import date
+            
+            # Find cycle active today or most recent
+            today = date.today()
+            active_cycle = CycleRecord.objects.filter(
+                user=request.user.profile,
+                start_date__lte=today
+            ).order_by('-start_date').first()
+            
+            if active_cycle:
+                # Merge symptoms
+                current_symptoms = active_cycle.symptoms or []
+                # If new_symptoms is dict, convert to list of strings "key: value" or just keys
+                # The pipeline returns dict {acne: true, pain: "high"}
+                # Let's convert to list of strings
+                
+                formatted_new = []
+                if isinstance(new_symptoms, dict):
+                    for k, v in new_symptoms.items():
+                        if v is True: formatted_new.append(k)
+                        elif v: formatted_new.append(f"{k}: {v}")
+                elif isinstance(new_symptoms, list):
+                    formatted_new = new_symptoms
+                    
+                # Add unique
+                updated_list = list(set(current_symptoms + formatted_new))
+                active_cycle.symptoms = updated_list
+                active_cycle.save()
+                print(f"✅ Added symptoms to cycle {active_cycle.id}: {formatted_new}")
 
         return Response({
             'response_text':          result['response_text'],

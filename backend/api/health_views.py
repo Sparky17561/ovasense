@@ -142,6 +142,21 @@ def predict_cycle(request):
     })
 
 
+@csrf_exempt
+@api_view(["POST"])
+def delete_cycle(request, cycle_id):
+    """Delete a specific cycle record"""
+    profile, err = get_profile(request, request.data.get("user_id") or request.GET.get("user_id"))
+    if err: return err
+    
+    try:
+        cycle = CycleRecord.objects.get(id=cycle_id, user=profile)
+        cycle.delete()
+        return Response({"message": "Cycle deleted successfully"}, status=200)
+    except CycleRecord.DoesNotExist:
+        return Response({"error": "Cycle not found"}, status=404)
+
+
 # ============================================================
 # HEALTH METRICS
 # ============================================================

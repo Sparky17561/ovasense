@@ -113,6 +113,12 @@ export const predictCycle = async () => {
     return response.data;
 };
 
+export const deleteCycle = async (cycleId) => {
+    await initCSRF();
+    const response = await api.post(`/cycle/delete/${cycleId}/`);
+    return response.data;
+};
+
 /* ==========================================
    KNOWLEDGE BASE
 ========================================== */

@@ -18,6 +18,7 @@ import Baymax from "./pages/Baymax";
 
 import Login from "./components/Login";
 import Register from "./components/Register";
+import LandingPage from "./pages/LandingPage";
 
 import { 
     LayoutDashboard, 
@@ -65,7 +66,7 @@ function ProtectedRoute({ children }) {
 ================================= */
 function Sidebar({ isOpen, onClose }) {
     const navItems = [
-        { path: "/", icon: <LayoutDashboard className="w-5 h-5" />, label: "Dashboard" },
+        { path: "/dashboard", icon: <LayoutDashboard className="w-5 h-5" />, label: "Dashboard" },
         { path: "/analyse", icon: <Microscope className="w-5 h-5" />, label: "Analyse" },
         { path: "/calendar", icon: <Calendar className="w-5 h-5" />, label: "Period Tracker" },
         { path: "/knowledge", icon: <BookOpen className="w-5 h-5" />, label: "Knowledge Base" },
@@ -160,7 +161,7 @@ function AppLayout() {
                 {/* Page Content */}
                 <main className="flex-1 overflow-y-auto w-full scroll-smooth">
                     <Routes>
-                        <Route path="/" element={<Dashboard />} />
+                        <Route path="/dashboard" element={<Dashboard />} />
                         <Route path="/analyse" element={<Analyse />} />
                         <Route path="/knowledge" element={<Knowledge />} />
                         <Route path="/calendar" element={<PeriodCalendar />} />
@@ -183,6 +184,7 @@ function App() {
                 {/* PUBLIC */}
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/" element={<LandingPage />} />
 
                 {/* PROTECTED */}
                 <Route

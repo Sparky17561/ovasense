@@ -231,7 +231,7 @@ const ConfidenceCircle = ({ confidence }) => {
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
              <span className="text-xl font-bold text-white">{pct.toFixed(0)}%</span>
-             <span className="text-[10px] text-gray-400 uppercase tracking-widest">Match</span>
+             <span className="text-[8px] text-gray-400 uppercase tracking-widest">Confidence</span>
           </div>
       </div>
     </div>
@@ -751,7 +751,7 @@ export default function Analyse() {
                         >
                             <div className="flex justify-between items-start mb-2">
                                 <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${isActive ? 'bg-pink-500 text-white' : 'bg-[#222] text-gray-400'}`}>
-                                    {meta.confidence}% Match
+                                    {meta.confidence}% Confidence
                                 </span>
                                 <span className="text-[10px] text-gray-500">
                                     {meta.date ? new Date(meta.date).toLocaleDateString() : ''}

@@ -23,7 +23,7 @@ export default function Login() {
             const me = await getMe();
 
             if (me.authenticated) {
-                navigate("/", { replace: true });
+                navigate("/dashboard", { replace: true });
                 window.location.reload();   // refresh ProtectedRoute
             } else {
                 alert("Login failed. Session not created.");

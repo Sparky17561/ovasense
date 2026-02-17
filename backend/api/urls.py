@@ -15,6 +15,7 @@ urlpatterns = [
     path('cycle/log/', health_views.log_cycle, name='log_cycle'),
     path('cycle/list/', health_views.list_cycles, name='list_cycles'),
     path('cycle/predict/', health_views.predict_cycle, name='predict_cycle'),
+    path('cycle/delete/<int:cycle_id>/', health_views.delete_cycle, name='delete_cycle'),
     
     # Health Metrics & Trends
     path('health/metric/', health_views.log_health_metric, name='log_health_metric'),

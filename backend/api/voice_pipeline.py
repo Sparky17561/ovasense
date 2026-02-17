@@ -81,8 +81,8 @@ def extract_symptom_data(conversation_history):
     extraction_prompt = f"""You are a data extraction AI. Extract health data from this conversation.
 
 REQUIRED FIELDS:
-1. **period_action** (str|null): "start" (if period started), "end", "spotting", or null.
-2. **period_date** (str|null): "today", "yesterday", "YYYY-MM-DD", or null.
+1. **period_start_date** (str|null): "YYYY-MM-DD" if user says "started period today/yesterday/etc".
+2. **period_end_date** (str|null): "YYYY-MM-DD" if user says "period ended today/yesterday/etc".
 3. **diet_request** (bool): Did user ask for specific food advice?
 4. **mental_state** (str|null): "stressed", "anxious", "sad", "happy", etc.
 5. **symptoms** (dict): Any PCOS symptoms mentioned (acne, pain, weight_gain, etc.) as key:value.
@@ -90,8 +90,10 @@ REQUIRED FIELDS:
 Conversation:
 {conv_text}
 
+NOTE: today is {datetime.now().strftime('%Y-%m-%d')}. Calculate specific dates based on this.
+
 Output valid JSON only.
-Format: {{"period_action": "start", "period_date": "today", "diet_request": false, "mental_state": "anxious", "symptoms": {{}}}}
+Format: {{"period_start_date": "2023-10-27", "period_end_date": null, "diet_request": false, "mental_state": "anxious", "symptoms": {{}}}}
 """
 
     try:

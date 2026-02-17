@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { listCycles, predictCycle, logCycle } from "../api";
+import { listCycles, predictCycle, logCycle, deleteCycle } from "../api";
 import { 
     Calendar as CalendarIcon, 
     Plus, 
@@ -9,7 +9,8 @@ import {
     AlertCircle, 
     CheckCircle2, 
     ChevronRight,
-    CalendarDays
+    CalendarDays,
+    Trash2
 } from "lucide-react";
 
 export default function PeriodCalendar() {
@@ -71,6 +72,20 @@ export default function PeriodCalendar() {
         } catch (e) {
             console.error("Error logging:", e);
             setError("Failed to log period. Are you logged in?");
+        }
+    };
+
+    const handleDelete = async (cycleId) => {
+        if (!window.confirm("Are you sure you want to delete this cycle log?")) {
+            return;
+        }
+
+        try {
+            await deleteCycle(cycleId);
+            loadData(); // Reload the list
+        } catch (e) {
+            console.error("Error deleting:", e);
+            setError("Failed to delete cycle. Please try again.");
         }
     };
 
@@ -219,6 +234,15 @@ export default function PeriodCalendar() {
                                         "{cycle.notes}"
                                     </div>
                                 )}
+
+                                {/* Delete Button */}
+                                <button
+                                    onClick={() => handleDelete(cycle.id)}
+                                    className="ml-auto p-2 text-gray-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all group-hover:opacity-100 opacity-0 md:opacity-100"
+                                    title="Delete this cycle"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
 
                             </div>
                         ))}
