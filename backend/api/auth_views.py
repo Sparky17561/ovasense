@@ -63,6 +63,8 @@ def register(request):
 
 
 # ---------------- LOGIN ----------------
+from rest_framework.authtoken.models import Token
+
 @api_view(["POST"])
 def login_view(request):
     username = request.data.get("username")
@@ -74,9 +76,13 @@ def login_view(request):
         return Response({"error": "Invalid credentials"}, status=400)
 
     login(request, user)
-    request.session.save()
+    token, _ = Token.objects.get_or_create(user=user)
 
-    return Response({"message": "Logged in", "username": user.username})
+    return Response({
+        "message": "Logged in", 
+        "token": token.key,
+        "username": user.username
+    })
 
 
 # ---------------- LOGOUT ----------------

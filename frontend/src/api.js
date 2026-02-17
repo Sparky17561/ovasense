@@ -1,145 +1,73 @@
 /**
  * API client for Django backend
- * Works with Django Session Auth + CSRF
+ * Uses Token Authentication for Cross-Domain support
  */
 
 import axios from "axios";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
 
-/* ==========================================
-   CREATE AXIOS INSTANCE
-========================================== */
 const api = axios.create({
     baseURL: API_BASE_URL,
-    withCredentials: true,   // 🔥 VERY IMPORTANT
     headers: {
         "Content-Type": "application/json",
     },
 });
 
-/* ==========================================
-   CSRF AUTO CONFIG
-========================================== */
-api.defaults.xsrfCookieName = "csrftoken";
-api.defaults.xsrfHeaderName = "X-CSRFToken";
+/* ===============================
+   INTERCEPTOR: ADD TOKEN
+================================== */
+api.interceptors.request.use((config) => {
+    const token = localStorage.getItem("ovasense_token");
+    if (token) {
+        config.headers.Authorization = `Token ${token}`;
+    }
+    return config;
+});
 
-/* ==========================================
-   GET CSRF COOKIE FIRST
-========================================== */
-export const initCSRF = async () => {
-    await api.get("/auth/csrf/");
-};
-
-/* ==========================================
+/* ===============================
    AUTH APIs
-========================================== */
-export const registerUser = async (data) => {
-    await initCSRF();   // 🔥 REQUIRED
-    const res = await api.post("/auth/register/", data);
-    return res.data;
-};
-
+================================== */
 export const loginUser = async (data) => {
-    await initCSRF();   // 🔥 REQUIRED
     const res = await api.post("/auth/login/", data);
+    if (res.data.token) {
+        localStorage.setItem("ovasense_token", res.data.token);
+    }
     return res.data;
 };
 
 export const logoutUser = async () => {
-    await initCSRF();   // 🔥 REQUIRED
-    const res = await api.post("/auth/logout/");
-    return res.data;
+    await api.post("/auth/logout/");
+    localStorage.removeItem("ovasense_token");
 };
 
 export const getMe = async () => {
-    const res = await api.get("/auth/me/");
-    return res.data;
+    try {
+        const res = await api.get("/auth/me/");
+        return res.data;
+    } catch (err) {
+        return { authenticated: false };
+    }
 };
 
-/* ==========================================
-   PCOS APIs
-========================================== */
-export const logSymptoms = async (symptomData) => {
-    await initCSRF();
-    const response = await api.post("/log/", symptomData);
-    return response.data;
-};
+/* ===============================
+   PCOS & OTHER APIs
+================================== */
+export const logSymptoms = async (data) => (await api.post("/log/", data)).data;
+export const classifySymptoms = async (data) => (await api.post("/classify/", data)).data;
+export const getHistory = async () => (await api.get("/history/")).data;
+export const downloadReport = (id) => `${API_BASE_URL}/report/${id}/`;
+export const processText = async (text, history, current) =>
+    (await api.post("/text/", { text, conversation_history: history, current_data: current })).data;
 
-export const classifySymptoms = async (symptomData) => {
-    await initCSRF();
-    const response = await api.post("/classify/", symptomData);
-    return response.data;
-};
+export const logCycle = async (data) => (await api.post("/cycle/log/", data)).data;
+export const listCycles = async (limit = 10) => (await api.get(`/cycle/list/?limit=${limit}`)).data;
+export const predictCycle = async () => (await api.get("/cycle/predict/")).data;
+export const deleteCycle = async (id) => (await api.post(`/cycle/delete/${id}/`)).data;
 
-export const getHistory = async () => {
-    const response = await api.get("/history/");
-    return response.data;
-};
-
-export const downloadReport = (resultId) => {
-    return `${API_BASE_URL}/report/${resultId}/`;
-};
-
-/* ==========================================
-   BAYMAX CHAT
-========================================== */
-export const processText = async (text, conversationHistory, currentData) => {
-    await initCSRF();
-    const response = await api.post("/text/", {
-        text,
-        conversation_history: conversationHistory,
-        current_data: currentData,
-    });
-    return response.data;
-};
-
-/* ==========================================
-   PERIOD TRACKING
-========================================== */
-export const logCycle = async (cycleData) => {
-    await initCSRF();
-    const response = await api.post("/cycle/log/", cycleData);
-    return response.data;
-};
-
-export const listCycles = async (limit = 10) => {
-    const response = await api.get(`/cycle/list/?limit=${limit}`);
-    return response.data;
-};
-
-export const predictCycle = async () => {
-    const response = await api.get("/cycle/predict/");
-    return response.data;
-};
-
-export const deleteCycle = async (cycleId) => {
-    await initCSRF();
-    const response = await api.post(`/cycle/delete/${cycleId}/`);
-    return response.data;
-};
-
-/* ==========================================
-   KNOWLEDGE BASE
-========================================== */
-export const listArticles = async (category = null) => {
-    let url = "/articles/";
-    if (category) url += `?category=${category}`;
-    const response = await api.get(url);
-    return response.data;
-};
-
-export const getArticle = async (articleId) => {
-    const response = await api.get(`/articles/${articleId}/`);
-    return response.data;
-};
-
-/* ==========================================
-   AI INSIGHTS
-========================================== */
-export const getCycleInsight = async () => {
-    const res = await api.get("/insights/cycle-aware/");
-    return res.data;
-};
+export const listArticles = async (cat = null) =>
+    (await api.get(cat ? `/articles/?category=${cat}` : "/articles/")).data;
+export const getArticle = async (id) => (await api.get(`/articles/${id}/`)).data;
+export const getCycleInsight = async () => (await api.get("/insights/cycle-aware/")).data;
 
 export default api;
