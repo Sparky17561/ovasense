@@ -1,291 +1,277 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import ChatBox from '../components/ChatBox';
-import VoiceButton from '../components/VoiceButton';
-import { classifySymptoms, processText } from '../api';
-import { downloadReport } from '../api';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { processVoice } from '../api';
 import './Baymax.css';
 
-function Baymax() {
-    const navigate = useNavigate();
-    const [messages, setMessages] = useState([]);
-    const [inputText, setInputText] = useState('');
-    const [symptomData, setSymptomData] = useState({
-        cycle_gap_days: null,
-        acne: null,
-        bmi: null,
-        stress_level: null,
-        sleep_hours: null
-    });
-    const [currentQuestion, setCurrentQuestion] = useState('cycle_gap');
+export default function Baymax() {
+    const [isListening, setIsListening] = useState(false);
+    const [isSpeaking, setIsSpeaking] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [result, setResult] = useState(null);
-    const [conversationComplete, setConversationComplete] = useState(false);
-    const chatEndRef = useRef(null);
-    const [initialized, setInitialized] = useState(false);
+    const [transcript, setTranscript] = useState('');
+    const [responseText, setResponseText] = useState('');
+    const [status, setStatus] = useState('idle'); // idle, listening, processing, speaking
+    const [conversationHistory, setConversationHistory] = useState([]);
+    const [waveAmplitudes, setWaveAmplitudes] = useState(new Array(32).fill(0));
 
+    const mediaRecorderRef = useRef(null);
+    const audioChunksRef = useRef([]);
+    const audioContextRef = useRef(null);
+    const analyserRef = useRef(null);
+    const animFrameRef = useRef(null);
+    const streamRef = useRef(null);
+
+    // Cleanup on unmount
     useEffect(() => {
-        // Show welcome message on first load
-        if (!initialized && messages.length === 0) {
-            setTimeout(() => {
-                addMessage('assistant', 'Hello! I\'m Baymax, your personal healthcare companion. I\'m here to help you understand your PCOS symptoms. How are you feeling today?');
-                setInitialized(true);
-            }, 500);
-        }
+        return () => {
+            stopListening();
+            if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+        };
     }, []);
 
+    // Waveform animation for speaking state
     useEffect(() => {
-        // Scroll to bottom when new messages arrive
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+        let interval;
+        if (isSpeaking) {
+            interval = setInterval(() => {
+                setWaveAmplitudes(prev =>
+                    prev.map(() => Math.random() * 0.6 + 0.2)
+                );
+            }, 80);
+        } else if (status === 'idle') {
+            setWaveAmplitudes(new Array(32).fill(0));
+        }
+        return () => clearInterval(interval);
+    }, [isSpeaking, status]);
 
-    const addMessage = (sender, text) => {
-        const newMessage = {
-            sender,
-            text,
-            timestamp: Date.now()
-        };
-        setMessages(prev => [...prev, newMessage]);
+    // Animate waveform from mic input
+    const animateMicWave = useCallback(() => {
+        if (!analyserRef.current) return;
+        const data = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteFrequencyData(data);
 
-        // Note: Speech is now handled by server-side voice pipeline (Kokoro TTS)
-        // Voice responses come from the /api/voice/ endpoint
+        // Sample 32 bands
+        const bands = 32;
+        const step = Math.floor(data.length / bands);
+        const amps = [];
+        for (let i = 0; i < bands; i++) {
+            amps.push(data[i * step] / 255);
+        }
+        setWaveAmplitudes(amps);
+        animFrameRef.current = requestAnimationFrame(animateMicWave);
+    }, []);
+
+    const startListening = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            streamRef.current = stream;
+
+            // Setup audio analyser for waveform
+            audioContextRef.current = new AudioContext();
+            const source = audioContextRef.current.createMediaStreamSource(stream);
+            analyserRef.current = audioContextRef.current.createAnalyser();
+            analyserRef.current.fftSize = 256;
+            source.connect(analyserRef.current);
+
+            // Start recording
+            const mediaRecorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = mediaRecorder;
+            audioChunksRef.current = [];
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) audioChunksRef.current.push(e.data);
+            };
+
+            mediaRecorder.onstop = async () => {
+                const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                await handleVoiceSubmit(blob);
+            };
+
+            mediaRecorder.start();
+            setIsListening(true);
+            setStatus('listening');
+            setTranscript('');
+            setResponseText('');
+
+            // Start waveform animation
+            animateMicWave();
+
+        } catch (err) {
+            console.error('Mic error:', err);
+            setStatus('idle');
+        }
     };
 
-    const processUserInput = async (text) => {
-        addMessage('user', text);
+    const stopListening = () => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            mediaRecorderRef.current.stop();
+        }
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(t => t.stop());
+        }
+        if (audioContextRef.current) {
+            audioContextRef.current.close();
+        }
+        if (animFrameRef.current) {
+            cancelAnimationFrame(animFrameRef.current);
+        }
+        setIsListening(false);
+    };
+
+    const handleVoiceSubmit = async (audioBlob) => {
+        setStatus('processing');
         setIsProcessing(true);
+        setWaveAmplitudes(new Array(32).fill(0.1));
 
         try {
-            const response = await processText(text, messages, symptomData);
+            const response = await processVoice(audioBlob, conversationHistory);
 
-            // Add Baymax's response
-            if (response.response_text) {
-                setTimeout(() => {
-                    addMessage('assistant', response.response_text);
-                }, 500);
-            }
+            setTranscript(response.transcript || '');
+            setResponseText(response.response_text || '');
 
-            // Update symptom data
-            if (response.extracted_data) {
-                setSymptomData(prev => ({ ...prev, ...response.extracted_data }));
-            }
+            // Update conversation history
+            setConversationHistory(prev => [
+                ...prev,
+                { role: 'user', content: response.transcript || '' },
+                { role: 'assistant', content: response.response_text || '' }
+            ]);
 
-            // Check if done
-            if (response.ready_for_classification) {
-                console.log('🎯 All data collected via text! Submitting...', response.extracted_data);
+            // Play audio response
+            if (response.response_audio) {
+                setStatus('speaking');
+                setIsSpeaking(true);
 
-                setTimeout(async () => {
-                    await submitSymptoms(response.extracted_data || symptomData);
-                    setCurrentQuestion('support');
-                }, 1500);
+                const audioBytes = Uint8Array.from(atob(response.response_audio), c => c.charCodeAt(0));
+                const audioBlob = new Blob([audioBytes], { type: 'audio/wav' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+                const audio = new Audio(audioUrl);
+
+                audio.onended = () => {
+                    setIsSpeaking(false);
+                    setStatus('idle');
+                    URL.revokeObjectURL(audioUrl);
+                };
+
+                audio.onerror = () => {
+                    setIsSpeaking(false);
+                    setStatus('idle');
+                    URL.revokeObjectURL(audioUrl);
+                };
+
+                await audio.play();
             } else {
-                setIsProcessing(false);
+                setStatus('idle');
             }
-        } catch (error) {
-            console.error('Error processing text:', error);
-            addMessage('assistant', 'I apologize, but I encountered an error. Please try again.');
-            setIsProcessing(false);
+        } catch (err) {
+            console.error('Voice processing error:', err);
+            setResponseText('Sorry, something went wrong. Please try again.');
+            setStatus('idle');
         }
-    };
-
-    const submitSymptoms = async (data) => {
-        try {
-            const response = await classifySymptoms(data);
-            setResult(response);
-
-            // Show result in chat (voice already played from Groq's closing message)
-            const resultMessage = `Based on your symptoms, my assessment indicates: **${response.phenotype}** with ${response.confidence.toFixed(0)}% confidence. Here are the key factors I considered: ${response.reasons.join('; ')}. Would you like to download a detailed report?`;
-
-            setTimeout(() => {
-                addMessage('assistant', resultMessage);
-
-                // After result, enable mental health support mode
-                setConversationComplete(false);
-                setCurrentQuestion('support');
-
-                // Add support mode transition message
-                setTimeout(() => {
-                    const supportMsg = "I'm here to support you through this. How are you feeling? Would you like to talk about managing stress, improving sleep, or any other concerns?";
-                    addMessage('assistant', supportMsg);
-                }, 2000);
-            }, 1000);
-
-        } catch (error) {
-            console.error('Error submitting symptoms:', error);
-            addMessage('assistant', 'I apologize, but I encountered an error while analyzing your data. Please try again later.');
-        }
-    };
-
-    const handleSendMessage = () => {
-        if (inputText.trim() && !isProcessing && !conversationComplete) {
-            processUserInput(inputText);
-            setInputText('');
-        }
-    };
-
-    const handleVoiceTranscript = (transcript) => {
-        if (!conversationComplete) {
-            // Add user's transcribed message to UI
-            addMessage('user', transcript);
-        }
-    };
-
-    const handleVoiceResponse = async (responseText, extractedData, readyForClassification) => {
-        // Voice response already played via TTS
-        // Now add Baymax's Groq-generated response to the UI
-        if (responseText) {
-            setTimeout(() => {
-                addMessage('assistant', responseText);
-            }, 300);
-        }
-
-        console.log('Voice response received:', responseText);
-        console.log('Extracted data:', extractedData);
-        console.log('Ready for classification:', readyForClassification);
-
-        // Always update symptom data with any extracted fields
-        if (extractedData) {
-            setSymptomData(prev => ({ ...prev, ...extractedData }));
-        }
-
-        // If all data is collected, automatically submit for classification
-        if (readyForClassification && extractedData) {
-            console.log('🎯 All data collected! Submitting to ML engine:', extractedData);
-            setIsProcessing(true);
-
-            // Brief pause before submitting
-            setTimeout(async () => {
-                await submitSymptoms(extractedData);
-                // Don't set conversationComplete - instead switch to support mode
-                setCurrentQuestion('support');
-                setIsProcessing(false);
-            }, 1000);
-        }
-    };
-
-    const handleKeyPress = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSendMessage();
-        }
-    };
-
-    const handleDownloadReport = () => {
-        if (result && result.result_id) {
-            window.open(downloadReport(result.result_id), '_blank');
-        }
-    };
-
-    const getPhenotypeColor = (phenotype) => {
-        const colors = {
-            'Low Risk': '#06D6A0',
-            'Moderate Risk': '#FFB627',
-            'Insulin Resistant PCOS': '#EF476F',
-            'Lean PCOS': '#A23B72',
-            'Stress-Induced Irregularity': '#F18F01'
-        };
-        return colors[phenotype] || '#66FCF1';
-    };
-
-    const resetConversation = () => {
-        // Clear all state to start fresh
-        setMessages([]);
-        setSymptomData({
-            cycle_gap_days: null,
-            acne: null,
-            bmi: null,
-            stress_level: null,
-            sleep_hours: null
-        });
-        setCurrentQuestion('cycle_gap');
         setIsProcessing(false);
-        setResult(null);
-        setConversationComplete(false);
-        setInputText('');
-        setInitialized(true); // Prevent duplicate welcome message
+    };
 
-        // Add welcome message
-        setTimeout(() => {
-            addMessage('assistant', 'Hello! I\'m Baymax, your personal healthcare companion. I\'m here to help you understand your PCOS symptoms. How are you feeling today?');
-        }, 500);
+    const handleMicClick = () => {
+        if (isListening) {
+            stopListening();
+        } else if (!isProcessing && !isSpeaking) {
+            startListening();
+        }
+    };
+
+    const getStatusText = () => {
+        switch (status) {
+            case 'listening': return 'Listening...';
+            case 'processing': return 'Thinking...';
+            case 'speaking': return 'Speaking...';
+            default: return 'Tap to talk';
+        }
+    };
+
+    const getStatusColor = () => {
+        switch (status) {
+            case 'listening': return '#ff2d78';
+            case 'processing': return '#8338EC';
+            case 'speaking': return '#22c55e';
+            default: return '#333';
+        }
     };
 
     return (
-        <div className="baymax-container fade-in">
-            <div className="baymax-header">
-                <button className="btn btn-back" onClick={() => navigate('/')}>
-                    ← Back to Dashboard
+        <div className="baymax-page">
+            {/* Ambient background */}
+            <div className="baymax-ambient" style={{
+                background: status !== 'idle'
+                    ? `radial-gradient(circle at 50% 60%, ${getStatusColor()}15, transparent 70%)`
+                    : 'none'
+            }} />
+
+            {/* Center content */}
+            <div className="baymax-center">
+                {/* Waveform visualizer */}
+                <div className="waveform-container">
+                    <div className="waveform">
+                        {waveAmplitudes.map((amp, i) => (
+                            <div
+                                key={i}
+                                className="wave-bar"
+                                style={{
+                                    height: `${Math.max(4, amp * 120)}px`,
+                                    background: getStatusColor(),
+                                    opacity: 0.4 + amp * 0.6,
+                                    transition: status === 'speaking' ? 'height 0.08s ease' : 'height 0.05s ease',
+                                }}
+                            />
+                        ))}
+                    </div>
+                </div>
+
+                {/* Mic Button */}
+                <button
+                    className={`mic-button ${status}`}
+                    onClick={handleMicClick}
+                    disabled={isProcessing}
+                    style={{ '--status-color': getStatusColor() }}
+                >
+                    <div className="mic-icon">
+                        {status === 'listening' ? (
+                            <svg viewBox="0 0 24 24" className="mic-svg"><rect x="9" y="2" width="6" height="14" rx="3" fill="currentColor" /><path d="M5 11a7 7 0 0014 0" fill="none" stroke="currentColor" strokeWidth="2" /><line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" strokeWidth="2" /></svg>
+                        ) : status === 'processing' ? (
+                            <div className="spinner"></div>
+                        ) : status === 'speaking' ? (
+                            <svg viewBox="0 0 24 24" className="mic-svg"><path d="M3 9v6h4l5 5V4L7 9H3z" fill="currentColor" /><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="currentColor" /><path d="M19 12c0 2.97-1.65 5.54-4 6.71v2.06c3.45-1.28 6-4.56 6-8.77s-2.55-7.49-6-8.77v2.06c2.35 1.17 4 3.74 4 6.71z" fill="currentColor" /></svg>
+                        ) : (
+                            <svg viewBox="0 0 24 24" className="mic-svg"><rect x="9" y="2" width="6" height="14" rx="3" fill="currentColor" /><path d="M5 11a7 7 0 0014 0" fill="none" stroke="currentColor" strokeWidth="2" /><line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" strokeWidth="2" /></svg>
+                        )}
+                    </div>
+                    {(status === 'listening' || status === 'speaking') && (
+                        <div className="pulse-ring" />
+                    )}
                 </button>
-                <h1 className="baymax-title">
-                    <span className="baymax-icon">🤖</span> Baymax Assistant
-                </h1>
-                <button className="btn btn-secondary" onClick={resetConversation}>
-                    🔄 New Conversation
-                </button>
+
+                {/* Status */}
+                <p className="status-text" style={{ color: getStatusColor() }}>
+                    {getStatusText()}
+                </p>
+
+                {/* Transcript & Response */}
+                <div className="voice-text-area">
+                    {transcript && (
+                        <div className="voice-bubble user fade-in">
+                            <span className="bubble-label">You</span>
+                            <p>{transcript}</p>
+                        </div>
+                    )}
+                    {responseText && (
+                        <div className="voice-bubble assistant fade-in">
+                            <span className="bubble-label">Baymax</span>
+                            <p>{responseText}</p>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            <div className="chat-container glass-card">
-                <ChatBox messages={messages} />
-                <div ref={chatEndRef} />
-
-                {!conversationComplete && (
-                    <div className="input-container">
-                        <input
-                            type="text"
-                            className="input-field chat-input"
-                            placeholder={currentQuestion === 'support' ? "Share your thoughts or ask for support..." : "Type your response or use voice..."}
-                            value={inputText}
-                            onChange={(e) => setInputText(e.target.value)}
-                            onKeyPress={handleKeyPress}
-                            disabled={isProcessing}
-                        />
-                        <VoiceButton
-                            onTranscript={handleVoiceTranscript}
-                            onResponse={handleVoiceResponse}
-                            conversationHistory={messages}
-                            currentData={symptomData}
-                            disabled={isProcessing}
-                        />
-                        <button
-                            className="btn btn-primary send-btn"
-                            onClick={handleSendMessage}
-                            disabled={isProcessing || !inputText.trim()}
-                        >
-                            Send
-                        </button>
-                    </div>
-                )}
-
-                {result && (
-                    <div className="result-section">
-                        <div className="result-card-baymax" style={{ borderColor: getPhenotypeColor(result.phenotype) }}>
-                            <h3 className="result-title">Assessment Complete</h3>
-                            <div className="result-phenotype-badge" style={{ backgroundColor: getPhenotypeColor(result.phenotype) }}>
-                                {result.phenotype}
-                            </div>
-                            <p className="result-confidence">Confidence: {result.confidence.toFixed(0)}%</p>
-
-                            <div className="result-actions">
-                                <button className="btn btn-success" onClick={handleDownloadReport}>
-                                    📄 Download Report
-                                </button>
-                                <button className="btn btn-secondary" onClick={() => navigate('/')}>
-                                    View Dashboard
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {isProcessing && (
-                    <div className="processing-indicator">
-                        <div className="spinner"></div>
-                        <p>Processing...</p>
-                    </div>
-                )}
+            {/* Bottom branding */}
+            <div className="baymax-brand">
+                <span>💜</span> Baymax — Your Wellness Companion
             </div>
         </div>
     );
 }
-
-export default Baymax;

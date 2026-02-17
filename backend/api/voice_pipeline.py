@@ -137,7 +137,7 @@ Required fields (extract only if mentioned, including negatives):
 5. hair_loss (bool): Hair thinning or loss from scalp
 6. facial_hair_growth (bool): Excessive facial/body hair (hirsutism)
 7. bmi (float): Calculate from height/weight if given
-8. waist_cm (int): Waist circumference in cm
+8. waist_cm (int): Waist circumference in cm (Auto-convert inches: x * 2.54)
 9. family_diabetes_history (bool): Parents/siblings with diabetes
 10. sugar_cravings (bool): Cravings for sweets/sugar
 11. weight_gain (bool): Unexplained weight gain
@@ -150,20 +150,20 @@ Required fields (extract only if mentioned, including negatives):
 18. severe_pelvic_pain (bool): Debilitating pain
 19. possible_pregnancy (bool): Could be pregnant?
 20. pill_usage (bool): Recent birth control pill usage
-
-Conversation:
-{conv_text}
-
-CRITICAL: Output ONLY a single line of valid JSON.
-If a field is NOT mentioned at all (neither yes nor no), return null.
-Format: {{"cycle_gap_days": <int>, "periods_regular": <bool>, "longest_cycle_gap_last_year": <int>, "acne": <bool>, "hair_loss": <bool>, "facial_hair_growth": <bool>, "bmi": <float>, "waist_cm": <int>, "family_diabetes_history": <bool>, "sugar_cravings": <bool>, "weight_gain": <bool>, "fatigue_after_meals": <bool>, "mood_swings": <bool>, "dark_patches": <bool>, "stress_level": <int>, "sleep_hours": <float>, "heavy_bleeding": <bool>, "severe_pelvic_pain": <bool>, "possible_pregnancy": <bool>, "pill_usage": <bool>}}
+21. cycle_irregularity_duration_months (int): How long irregular cycles have persisted
+22. acne_duration_months (int): How long acne has persisted
+23. weight_gain_duration_months (int): How long weight gain has persisted
+24. recent_major_stress_event (bool): Major stress in last 3 months
+25. thyroid_history (bool): Diagnosed thyroid issues
+26. recent_travel_or_illness (bool): Travel or illness in last 3 months
+27. sudden_weight_change (bool): Rapid weight change < 3 months
 
 Conversation:
 {conv_text}
 
 CRITICAL: Output ONLY a single line of valid JSON. NO comments, NO explanations, NO notes.
 If a field is NOT mentioned at all (neither yes nor no), return null.
-Format: {{"cycle_gap_days": <int or null>, "acne": <true/false/null>, "bmi": <float or null>, "stress_level": <int or null>, "sleep_hours": <float or null>, "sugar_cravings": <bool>, "weight_gain": <bool>, "hair_loss": <bool>, "dark_patches": <bool>, "mood_swings": <bool>, "pill_usage": <bool>}}"""
+Format: {{"cycle_gap_days": <int or null>, "acne": <true/false/null>, "bmi": <float or null>, "stress_level": <int or null>, "sleep_hours": <float or null>, "sugar_cravings": <bool>, "weight_gain": <bool>, "hair_loss": <bool>, "dark_patches": <bool>, "mood_swings": <bool>, "pill_usage": <bool>, "waist_cm": <int>, "thyroid_history": <bool>, "recent_major_stress_event": <bool>}}"""
 
     try:
         completion = groq_client.chat.completions.create(
@@ -225,20 +225,45 @@ def get_baymax_response(user_text, conversation_history=None, current_data=None)
     current_data = current_data or {}
     
     # Format current status clearly - treat None as MISSING
-    # We must track ALL 20 fields strictly
+    # We must track ALL fields strictly
     all_fields = [
         'cycle_gap_days', 'periods_regular', 'longest_cycle_gap_last_year',
         'acne', 'hair_loss', 'facial_hair_growth', 'bmi', 'waist_cm',
         'sugar_cravings', 'weight_gain', 'dark_patches', 'family_diabetes_history',
         'fatigue_after_meals', 'mood_swings', 'stress_level', 'sleep_hours',
-        'heavy_bleeding', 'severe_pelvic_pain', 'possible_pregnancy', 'pill_usage'
+        'heavy_bleeding', 'severe_pelvic_pain', 'possible_pregnancy', 'pill_usage',
+        'cycle_irregularity_duration_months', 'acne_duration_months', 'weight_gain_duration_months',
+        'recent_major_stress_event', 'thyroid_history', 'recent_travel_or_illness', 'sudden_weight_change'
     ]
     
     data_status = {}
     for field in all_fields:
         val = current_data.get(field)
         data_status[field] = val if val is not None else 'MISSING'
-    
+
+    # ---------------------------------------------------------
+    # UNIT VALIDATION & LOGIC CHECKS
+    # ---------------------------------------------------------
+    waist = current_data.get('waist_cm')
+    if waist is not None:
+        # Detect inches (e.g. 30 inches) -> Convert to cm (76.2)
+        if 20 <= waist <= 50: 
+            # Likely inches
+            print(f"⚠️ Detect inches for waist: {waist}. Asking for clarification.")
+            current_data['waist_cm'] = None # Reset to force re-ask or confirmation
+            data_status['waist_cm'] = 'MISSING' 
+            # We will handle the prompt instruction below
+        elif waist < 20 or waist > 200:
+             # Impossible values
+             current_data['waist_cm'] = None
+             data_status['waist_cm'] = 'MISSING'
+
+    # BMI Logic Guard
+    bmi = current_data.get('bmi')
+    if bmi is not None and (bmi < 10 or bmi > 60):
+        current_data['bmi'] = None
+        data_status['bmi'] = 'MISSING'
+
     missing_fields = [k for k, v in data_status.items() if v == 'MISSING']
     collected_fields = [k for k, v in data_status.items() if v != 'MISSING']
     
@@ -254,13 +279,27 @@ def get_baymax_response(user_text, conversation_history=None, current_data=None)
 ⚠️ CRITICAL INSTRUCTION:
 You are in DATA COLLECTION MODE.
 Your ONLY goal is to get values for the MISSING fields above.
-1. Look at the "MISSING" list.
-2. Pick the top 1-2 most important fields from that list (Prioritize: Period Regularity > Androgen signs > Metabolic signs).
-3. Ask the user SPECIFIC questions to get those details.
-4. DO NOT provide advice or analysis yet.
-5. If the user mentions a RED FLAG (heavy bleeding, pain), STOP and advise a doctor.
 
-Example: If 'acne' and 'weight_gain' are missing, ask: "Have you noticed any changes in your skin like acne, or any unexplained weight gain?"
+1. **Unit Checks**:
+   - If user gives WAIST size < 50, ASK: "Was that in inches or centimeters?"
+   - If BMI looks wrong (<15 or >50), ASK to confirm height and weight.
+
+2. **Duration & History**:
+   - If they report irregular cycles, ASK: "How long has this been happening?" (duration_months).
+   - If they report weight gain, ASK: "Did this happen suddenly (less than 3 months)?" (sudden_weight_change).
+   - ASK about **Thyroid history** and **Recent major stress** to rule out other causes.
+
+3. **Priorities**:
+   - 1. Cycle Details (Regularity, Gaps, Duration)
+   - 2. Androgen Signs (Acne, Hair)
+   - 3. Metabolic (Weight, Waist, Family Diabetes)
+   - 4. Differentials (Thyroid, Stress, Travel)
+
+4. **Safety**:
+   - If RED FLAG (heavy bleeding, severe pain) -> STOP and advise doctor.
+
+5. **Completion**:
+   - DO NOT say "analyzing" until ALL fields are collected.
 """
     
     # Build conversation messages
@@ -315,7 +354,8 @@ Example: If 'acne' and 'weight_gain' are missing, ask: "Have you noticed any cha
         return {
             'response_text': response_text,
             'extracted_data': merged_data,
-            'ready_for_classification': is_complete
+            'ready_for_classification': is_complete,
+            'missing_fields': still_missing
         }
         
     except Exception as e:

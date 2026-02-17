@@ -29,7 +29,7 @@ def test_flow():
     
     response = get_baymax_response(user_input, history, current_data)
     print(f"Baymax: {response['response_text']}")
-    print(f"Missing: {[k for k,v in response['extracted_data'].items() if v is None]}")
+    print(f"Backend Missing Fields: {response.get('missing_fields')}")
     
     # Update state
     history.append({'sender': 'user', 'text': user_input})
@@ -65,7 +65,9 @@ def test_flow():
         'acne', 'hair_loss', 'facial_hair_growth', 'bmi', 'waist_cm',
         'sugar_cravings', 'weight_gain', 'dark_patches', 'family_diabetes_history',
         'fatigue_after_meals', 'mood_swings', 'stress_level', 'sleep_hours',
-        'heavy_bleeding', 'severe_pelvic_pain', 'possible_pregnancy', 'pill_usage'
+        'heavy_bleeding', 'severe_pelvic_pain', 'possible_pregnancy', 'pill_usage',
+        'cycle_irregularity_duration_months', 'acne_duration_months', 'weight_gain_duration_months',
+        'recent_major_stress_event', 'thyroid_history', 'recent_travel_or_illness', 'sudden_weight_change'
     ]
     missing = [f for f in all_fields if current_data.get(f) is None]
     print(f"❌ Missing: {missing}")

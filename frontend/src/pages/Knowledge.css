@@ -1,0 +1,91 @@
+/* ========== CATEGORY FILTER ========== */
+.category-filter {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+}
+
+.filter-btn {
+    padding: 8px 18px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+}
+
+.filter-btn:hover {
+    border-color: var(--pink);
+    color: var(--text);
+}
+
+.filter-btn.active {
+    background: var(--pink);
+    border-color: var(--pink);
+    color: white;
+}
+
+/* ========== ARTICLES GRID ========== */
+.articles-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+.article-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: left;
+    font-family: inherit;
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+.article-card:hover {
+    border-color: var(--pink);
+    background: var(--bg-hover);
+}
+
+.article-icon {
+    font-size: 2rem;
+}
+
+.article-card h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+/* ========== ARTICLE VIEW ========== */
+.back-btn {
+    margin-bottom: 24px;
+}
+
+.article-view {
+    max-width: 700px;
+}
+
+.article-meta {
+    margin-bottom: 12px;
+}
+
+.article-view h1 {
+    font-size: 1.8rem;
+    font-weight: 800;
+    margin-bottom: 24px;
+    line-height: 1.3;
+}
+
+.article-content {
+    font-size: 0.95rem;
+    line-height: 1.8;
+    color: var(--text-secondary);
+}

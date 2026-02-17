@@ -12,6 +12,10 @@ from .serializers import (
 from .ml_engine import classify_phenotype
 from .report import generate_pdf_report
 
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
 
 @api_view(['POST'])
 def log_symptoms(request):
@@ -56,27 +60,12 @@ def log_symptoms(request):
 def classify_symptoms(request):
     """
     POST /api/classify/
-    
-    Classify PCOS phenotype based on symptom data.
-    Creates both SymptomLog and PhenotypeResult.
-    
-    Request body:
-    {
-        "cycle_gap_days": int,
-        "acne": bool,
-        "bmi": float,
-        "stress_level": int,
-        "sleep_hours": float
-    }
-    
-    Returns:
-    {
-        "symptom_log_id": int,
-        "phenotype": str,
-        "confidence": float,
-        "reasons": [str]
-    }
+    Classify PCOS phenotype using rule-based engine + GenAI analysis.
+    Returns phenotype, confidence, reasons, AI explanation, and diet plan.
     """
+    import os, json
+    from groq import Groq
+    
     # Validate and save symptom data
     symptom_serializer = SymptomLogSerializer(data=request.data)
     
@@ -88,15 +77,75 @@ def classify_symptoms(request):
     
     symptom_log = symptom_serializer.save()
     
-    # Perform classification
+    # Step 1: Rule-based classification
     classification = classify_phenotype(request.data)
+    
+    # Step 2: GenAI analysis via Groq
+    ai_explanation = ""
+    diet_plan = ""
+    try:
+        client = Groq(api_key=os.environ.get('GROQ_API_KEY'))
+        
+        symptom_summary = json.dumps({k: v for k, v in request.data.items() if v is not None}, indent=2)
+        
+        ai_prompt = f"""You are an expert PCOS endocrinologist. A patient has been classified as: **{classification['phenotype']}** with {classification['confidence']}% confidence.
+
+Their symptom data:
+{symptom_summary}
+
+Rule-based reasoning: {'; '.join(classification['reasons'])}
+
+Provide TWO sections in your response, clearly separated:
+
+**SECTION 1 - DETAILED ANALYSIS:**
+- WHY this specific PCOS type was predicted (root cause mechanism)
+- What's happening hormonally in their body
+- Risk factors identified from their data
+- What to monitor going forward
+- Keep it medically accurate but in simple language (2-3 paragraphs)
+
+**SECTION 2 - PERSONALIZED DIET PLAN:**
+- Based on their specific PCOS type and symptoms
+- Include specific foods to eat and avoid
+- Meal timing recommendations
+- Supplement suggestions (e.g., inositol, vitamin D)
+- Weekly meal structure example
+- Keep it actionable and practical
+
+Format clearly with headers. Be specific to THEIR data, not generic."""
+
+        chat = client.chat.completions.create(
+            model=os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile'),
+            messages=[{"role": "user", "content": ai_prompt}],
+            max_tokens=2000,
+            temperature=0.4,
+        )
+        
+        full_response = chat.choices[0].message.content
+        
+        # Split into explanation and diet plan
+        if "SECTION 2" in full_response:
+            parts = full_response.split("SECTION 2")
+            ai_explanation = parts[0].replace("SECTION 1", "").replace("- DETAILED ANALYSIS:", "").replace("**", "").strip()
+            diet_plan = parts[1].replace("- PERSONALIZED DIET PLAN:", "").replace("**", "").strip()
+        else:
+            ai_explanation = full_response
+            diet_plan = "Diet plan could not be generated. Please consult a nutritionist."
+            
+    except Exception as e:
+        print(f"Groq AI analysis error: {e}")
+        ai_explanation = "AI analysis unavailable. Rule-based classification was used."
+        diet_plan = "Diet plan generation failed. Please try again."
     
     # Save classification result
     result_data = {
         'symptom_log': symptom_log.id,
         'phenotype': classification['phenotype'],
         'confidence': classification['confidence'],
-        'reasons': classification['reasons']
+        'reasons': classification['reasons'],
+        'data_quality_score': classification.get('data_quality_score'),
+        'rule_version': classification.get('rule_version'),
+        'differential_diagnosis': classification.get('differential_diagnosis'),
     }
     
     result_serializer = PhenotypeResultSerializer(data=result_data)
@@ -110,6 +159,10 @@ def classify_symptoms(request):
             'phenotype': phenotype_result.phenotype,
             'confidence': phenotype_result.confidence,
             'reasons': phenotype_result.reasons,
+            'ai_explanation': ai_explanation,
+            'diet_plan': diet_plan,
+            'data_quality_score': classification.get('data_quality_score'),
+            'differential_diagnosis': classification.get('differential_diagnosis'),
             'created_at': phenotype_result.created_at
         }, status=status.HTTP_201_CREATED)
     
@@ -153,28 +206,69 @@ def get_history(request):
 def download_report(request, result_id):
     """
     GET /api/report/<result_id>/
-    
-    Download PDF report for a specific phenotype result.
-    
-    Returns:
-    PDF file as attachment
+    Download PDF report with AI analysis and diet plan.
     """
+    import os, json
+    from groq import Groq
+    
     try:
         phenotype_result = PhenotypeResult.objects.get(id=result_id)
         symptom_log = phenotype_result.symptom_log
         
-        # Generate PDF
-        pdf_buffer = generate_pdf_report(symptom_log, phenotype_result)
+        # Generate AI content for PDF
+        ai_explanation = ""
+        diet_plan = ""
+        try:
+            client = Groq(api_key=os.environ.get('GROQ_API_KEY'))
+            
+            # Build symptom summary from the log
+            symptom_fields = {}
+            for f in ['cycle_gap_days', 'bmi', 'stress_level', 'sleep_hours', 'waist_cm',
+                       'acne', 'hair_loss', 'facial_hair_growth', 'weight_gain', 'mood_swings',
+                       'sugar_cravings', 'dark_patches', 'periods_regular', 'family_diabetes_history']:
+                val = getattr(symptom_log, f, None)
+                if val is not None:
+                    symptom_fields[f] = val
+            
+            prompt = f"""You are an expert PCOS endocrinologist. Patient classified as: {phenotype_result.phenotype} ({phenotype_result.confidence}% confidence).
+
+Symptom data: {json.dumps(symptom_fields)}
+Key factors: {'; '.join(phenotype_result.reasons or [])}
+
+Provide TWO clearly separated sections:
+
+**SECTION 1 - DETAILED ANALYSIS:**
+- Why this PCOS type, root cause mechanism, hormonal explanation
+- Risk factors, what to monitor (2-3 paragraphs, simple language)
+
+**SECTION 2 - PERSONALIZED DIET PLAN:**
+- Foods to eat and avoid for this PCOS type
+- Meal timing, supplements (inositol, vitamin D, etc.)
+- Weekly meal structure example
+- Keep it specific and actionable"""
+
+            chat = client.chat.completions.create(
+                model=os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile'),
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=2000, temperature=0.4,
+            )
+            
+            full = chat.choices[0].message.content
+            if "SECTION 2" in full:
+                parts = full.split("SECTION 2")
+                ai_explanation = parts[0].replace("SECTION 1", "").replace("- DETAILED ANALYSIS:", "").replace("**", "").strip()
+                diet_plan = parts[1].replace("- PERSONALIZED DIET PLAN:", "").replace("**", "").strip()
+            else:
+                ai_explanation = full
+        except Exception as e:
+            print(f"Report AI error: {e}")
         
-        # Create HTTP response with PDF
-        response = HttpResponse(
-            pdf_buffer.getvalue(),
-            content_type='application/pdf'
-        )
+        # Generate PDF with AI content
+        pdf_buffer = generate_pdf_report(symptom_log, phenotype_result, ai_explanation, diet_plan)
         
+        response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
         filename = f"OvaSense_Report_{result_id}_{symptom_log.created_at.strftime('%Y%m%d')}.pdf"
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        
         return response
         
     except PhenotypeResult.DoesNotExist:
@@ -274,7 +368,8 @@ def process_voice(request):
             'response_text': result['response_text'],
             'response_audio': audio_base64,
             'extracted_data': result.get('extracted_data'),
-            'ready_for_classification': result.get('ready_for_classification', False)
+            'ready_for_classification': result.get('ready_for_classification', False),
+            'missing_fields': result.get('missing_fields', [])
         })
         
     except Exception as e:
@@ -331,7 +426,8 @@ def process_text(request):
         return Response({
             'response_text': result['response_text'],
             'extracted_data': result.get('extracted_data'),
-            'ready_for_classification': result.get('ready_for_classification', False)
+            'ready_for_classification': result.get('ready_for_classification', False),
+            'missing_fields': result.get('missing_fields', [])
         })
         
     except Exception as e:
