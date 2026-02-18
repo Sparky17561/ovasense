@@ -50,6 +50,13 @@ export const getMe = async () => {
     }
 };
 
+export const registerUser = async (data) => {
+    const res = await api.post("/auth/register/", data);
+    if (res.data.token) {
+        localStorage.setItem("ovasense_token", res.data.token);
+    }
+    return res.data;
+};
 /* ===============================
    PCOS & OTHER APIs
 ================================== */

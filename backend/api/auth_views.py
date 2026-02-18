@@ -101,3 +101,10 @@ def me(request):
         "username": request.user.username,
         "name": name
     })
+
+
+# ---------------- CSRF ----------------
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def csrf(request):
+    return JsonResponse({"detail": "CSRF cookie set"})
