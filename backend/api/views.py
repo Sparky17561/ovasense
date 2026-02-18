@@ -581,6 +581,9 @@ def process_text(request):
         import traceback
         traceback.print_exc()
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+
 
 
 # @api_view(['POST'])

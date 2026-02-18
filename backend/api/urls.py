@@ -34,6 +34,7 @@ urlpatterns = [
     path("auth/logout/", auth_views.logout_view),
     path("auth/me/", auth_views.me),
     path("auth/csrf/", auth_views.csrf),
+    path("seed/", auth_views.seed_knowledge),
 
 
 ]
